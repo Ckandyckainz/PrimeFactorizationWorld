@@ -142,12 +142,14 @@ class Chunk {
   }
   resetImgdt() {
     for (let i = 0; i < this.map.length; i++) {
-      let b = 0;
-      for (let j = 0; j < 64; j++) {
-        if (setBlock((this.id % 16) * 16 + i % 16 + randomBetween(-12, 13), Math.floor(this.id / 16) * 16 + Math.floor(i / 16) + randomBetween(-12, 13), 0) == 1) {
-          b += 3 / 64;
+        let b = 0;
+        for (let j=-6; j<7; j++) {
+            for (let k=-6; k<7; k++) {
+                if (setBlock((this.id % 16) * 16 + i % 16 + j, Math.floor(this.id / 16) * 16 + Math.floor(i / 16) + k, 0) == 1) {
+                    b += 3/169;
+                }
+            }
         }
-      }
       if (b > 1) {
         b = 1;
       }
@@ -207,17 +209,7 @@ function weightedArrayPick(array, weight) {
 }
 
 function setBlock(x, y, n) {
-  let inMap = false;
-  if (x >= 0) {
-    if (y >= 0) {
-      if (x <= 255) {
-        if (y <= 511) {
-          inMap = true
-        }
-      }
-    }
-  }
-  if (inMap) {
+  if (inWorldBounds(x, y)) {
     let x2 = Math.floor(x / 16);
     let y2 = Math.floor(y / 16);
     if (n == 0) {
@@ -445,7 +437,7 @@ function mousemove(event) {
   let y = Math.floor((view.y - mch / 2 + event.y) / 16);
   mouseTouching = 1;
   if (setBlock(x, y, 0) != 1) {
-    if (setBlock(x, y, "b") > 0.5) {
+    if (setBlock(x, y, "b") > 0.2) {
       mouseTouching = setBlock(x, y, 0);
       let seenNew = true;
       inventory.forEach((item) => {
