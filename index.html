@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title></title>
+        <style>
+            body{
+                margin: 0;
+                padding: 0;
+            }
+            canvas{
+                margin: 0;
+                padding: 0;
+            }
+            #mcan{
+              width: 100%;
+              height: 100%;
+            }
+            #inventory{
+              margin: 0;
+              padding: 0;
+              height: 100%;
+              position: absolute;
+              top: 0;
+              left: 0;
+              background: #808080;
+              overflow-y: auto;
+            }
+            #tools{
+              margin: 0;
+              padding: 0;
+              position: absolute;
+              top: 8px;
+              left: 64px;
+              background: #808080;
+              overflow-y: auto;
+            }
+            #crafts{
+              margin: 0;
+              padding: 0;
+              position: absolute;
+              top: 48px;
+              left: 64px;
+              background: #808080;
+              overflow-y: auto;
+            }
+        </style>
+    </head>
+    <body>
+        <canvas id="mcan"></canvas>
+        <div id="inventory"></div>
+        <div id="tools"></div>
+        <div id="crafts"></div>
+        <script src="code.js"></script>
+    </body>
+</html>
