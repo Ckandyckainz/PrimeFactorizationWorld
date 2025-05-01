@@ -1,3 +1,5 @@
+// GitHub version
+
 let mcan = document.getElementById("mcan");
 let inventoryGUI = document.getElementById("inventory");
 let toolsGUI = document.getElementById("tools");
@@ -46,6 +48,15 @@ function drawSword(sword, ctx, x, y) {
 
 let drawToolFunctions = [drawPick, drawSword];
 
+function drawToolIcon(tool){
+    tool.ctx.fillStyle = "#808080FF";
+    tool.ctx.fillRect(0, 0, 40, 40);
+    tool.drawSelf(tool, tool.ctx, 16, 16);
+    tool.ctx.font = "16px serif";
+    tool.ctx.fillStyle = "#000000FF";
+    tool.ctx.fillText("".concat(tool.n), 0, 32);
+}
+
 class Tool {
   constructor(type, n) {
   	this.type = type;
@@ -58,10 +69,7 @@ class Tool {
     toolsGUI.appendChild(this.can);
     this.ctx = this.can.getContext("2d");
     this.drawSelf = drawToolFunctions[type];
-    this.drawSelf(this, this.ctx, 16, 16);
-    this.ctx.font = "16px serif";
-    this.ctx.fillStyle = "#000000FF";
-    this.ctx.fillText("".concat(this.n), 0, 32);
+    drawToolIcon(this);
     this.can.addEventListener("click", ()=>{
       let sbi = -3;
       let ti = -1;
@@ -84,8 +92,8 @@ class Tool {
           this.n = selectedBlock;
           this.n1 = primes[sbi+1].n;
           this.c = colorString(...primes[sbi].c, 1);
-          this.drawSelf(this, this.ctx, 16, 16);
-          inventory[index].a -= selectedBlock**2;
+          drawToolIcon(this);
+          increaseInventoryBlockAmount(index, -1*selectedBlock**2);
         }
       }
     });
@@ -230,30 +238,22 @@ function setBlock(x, y, n) {
 }
 
 function breakBlock(x, y) {
-  let block = setBlock(x, y, 0);
-  let index = 0;
-  while (inventory[index].n != block) {
-    index++;
-    if (inventory[index] == undefined) {
-      seenNewBlock(block);
-      index = 0;
-    }
+  let n = setBlock(x, y, 0);
+  let index = getNumIndex(inventory, n);
+  if (index == undefined) {
+    seenNewBlock(n);
+    index = 0;
   }
-  inventory[index].a++;
-  inventoryGUI.childNodes[index].childNodes[2].innerText = "".concat(inventory[index].a);
+  increaseInventoryBlockAmount(index, 1);
   setBlock(x, y, 1);
 }
 
 function placeBlock(x, y) {
   if (selectedBlock != undefined) {
-    let index = 0;
-    while (inventory[index].n != selectedBlock) {
-      index++;
-    }
+    let index = getNumIndex(inventory, selectedBlock);
     if (inventory[index].a > 0) {
-      inventory[index].a--;
-      lastSelectedBlockGUI.childNodes[2].innerText = "".concat(inventory[index].a);
-      setBlock(x, y, selectedBlock);
+        increaseInventoryBlockAmount(index, -1);
+        setBlock(x, y, selectedBlock);
     }
   }
 }
@@ -577,58 +577,44 @@ function physicsLoop() {
         breaking = true;
       }
     }
-    if (x > -1) {
-      if (y > -1) {
-        if (x < 256) {
-          if (y < 512) {
-            if (x > Math.floor(view.x / 16) - 9) {
-              if (y > Math.floor(view.y / 16) - 9) {
-                if (x < Math.floor(view.x / 16) + 8) {
-                  if (y < Math.floor(view.y / 16) + 8) {
-                    let bn = setBlock(x, y, 0);
-                    if (bn == 1) {
-                      if (!breaking) {
-                        let canPlace = false;
-                        for (let i = -1; i < 2; i++) {
-                          for (let j = -1; j < 2; j++) {
-                            if (setBlock(x + i, y + j, 0) != 1) {
-                              canPlace = true;
-                            }
-                          }
-                        }
-                        if (canPlace) {
-                          placeBlock(x, y);
-                        }
-                      }
-                    } else {
-                      if (breaking) {
-                        let canBreak = true;
-                        if (pick.n == 1) {
-                          if (bn != 2) {
-                            canBreak = false;
-                          }
-                        } else {
-                          pfs[bn].forEach((factor) => {
-                            if (primes[factor].n > pick.n) {
-                              canBreak = false;
-                            }
-                          });
-                          if (bn == pick.n1) {
-                            canBreak = true;
-                          }
-                        }
-                        if (canBreak) {
-                          breakBlock(x, y);
-                        }
-                      }
-                    }
-                  }
+    if (inWorldBounds(x, y) && inViewCenteredBounds(x, y, 9)) {
+        let bn = setBlock(x, y, 0);
+        if (bn == 1) {
+          if (!breaking) {
+            let canPlace = false;
+            for (let i = -1; i < 2; i++) {
+              for (let j = -1; j < 2; j++) {
+                if (setBlock(x + i, y + j, 0) != 1) {
+                  canPlace = true;
                 }
               }
             }
+            if (canPlace) {
+              placeBlock(x, y);
+            }
+          }
+        } else {
+          if (breaking) {
+            let canBreak = true;
+            if (pick.n == 1) {
+              if (bn != 2) {
+                canBreak = false;
+              }
+            } else {
+              pfs[bn].forEach((factor) => {
+                if (primes[factor].n > pick.n) {
+                  canBreak = false;
+                }
+              });
+              if (bn == pick.n1) {
+                canBreak = true;
+              }
+            }
+            if (canBreak) {
+              breakBlock(x, y);
+            }
           }
         }
-      }
     }
   }
   mouseWasDown = mouseDown;
@@ -658,3 +644,27 @@ function physicsLoop() {
   requestAnimationFrame(physicsLoop);
 }
 physicsLoop();
+
+function inWorldBounds(x, y) {
+    return x > -1 && y > -1 && x < 256 && y < 512;
+}
+
+function inViewCenteredBounds(x, y, dist){
+    let viewBlockX = Math.floor(view.x/16);
+    let viewBlockY = Math.floor(view.y/16);
+    return x > viewBlockX-dist && y > viewBlockY-dist && x < viewBlockX+dist-1 && y < viewBlockY+dist-1;
+}
+
+function getNumIndex(array, num) {
+    for (let i=0; i<array.length; i++) {
+        if (array[i].n == num) {
+            return i;
+        }
+    }
+    return undefined;
+}
+
+function increaseInventoryBlockAmount(index, amount){
+    inventory[index].a += amount;
+    inventoryGUI.childNodes[index].childNodes[2].innerText = "".concat(inventory[index].a);
+}
