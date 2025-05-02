@@ -199,25 +199,53 @@ class Chunk {
 }
 
 class EntityType {
-    constructor(name, behavior, startingState, startingVars, drop){
-        this.name = name;
-        this.behavior = behavior;
-        this.startingState = startingState;
-        this.startingVars = startingVars;
-        this.drop = drop;
+    constructor(ob){
+        this.name = ob.name;
+        this.behavior = ob.behavior;
+        this.startingState = ob.startingState;
+        this.startingVars = ob.startingVars;
+        this.drop = ob.drop;
+        this.drawSelf = ob.drawSelf;
+        this.maxHealth = ob.maxHealth;
+        this.canDamageByTouching = ob.canDamageByTouching;
     }
 }
 
 let entityTypes = {
-    driftingSquare: new EntityType(
-        "drifting square",
-        ()=>{},
-        {func: wanderBehavior, args: []},
-        [Math.random()*2-1, Math.random()*2-1],
-        ()=>{
+    driftingSquare: new EntityType({
+        name: "drifting square",
+        behavior: ()=>{},
+        startingState: {func: wanderBehavior, args: []},
+        startingVars: [Math.random()*2-1, Math.random()*2-1],
+        drop: ()=>{
             increaseInventoryNumAmount(weightedArrayPick(primes, 0.3).n, 1);
-        }
-    )
+        },
+        drawSelf: (ctx, x, y)=>{
+            ctx.fillStyle = "white";
+            ctx.fillRect(x-4, y-4, 8, 8);
+        },
+        maxHealth: 1,
+        canDamageByTouching: true
+    }),
+    rogueRobot: new EntityType({
+        name: "rogue robot",
+        behavior: ()=>{},
+        startingState: {func: wanderBehavior, args: []},
+        startingVars: [Math.random()*2-1, Math.random()*2-1],
+        drop: ()=>{
+            increaseInventoryNumAmount(weightedArrayPick(primes, 0.3).n, 1000);
+        },
+        drawSelf: (ctx, x, y)=>{
+            ctx.fillStyle = "#404040FF";
+            ctx.fillRect(x-16, y-16, 32, 32);
+            ctx.fillStyle = "red";
+            ctx.fillRect(x-12, y-12, 24, 24);
+            ctx.fillStyle = "#404040FF";
+            ctx.fillRect(x-8, y-8, 16, 16);
+        },
+        maxHealth: 100,
+        canDamageByTouching: false
+    })
 }
 
 class Entity {
@@ -225,6 +253,8 @@ class Entity {
         this.entityType = entityType;
         this.state = entityType.startingState;
         this.vars = entityType.startingVars;
+        this.maxHealth = this.entityType.maxHealth;
+        this.health = this.maxHealth;
         this.x = x;
         this.y = y;
         this.id = entityIdCounter;
@@ -232,8 +262,7 @@ class Entity {
         entities.push(this);
     }
     drawSelf(ctx, x, y){
-        ctx.fillStyle = "white";
-        ctx.fillRect(x, y, 8, 8);
+        this.entityType.drawSelf(ctx, x, y);
     }
 }
 
@@ -504,7 +533,7 @@ function mousemove(event) {
   for (let i=0; i<entities.length; i++) {
     let entity = entities[i];
     if (Math.abs(entity.x/16-x)+Math.abs(entity.y/16-y) < 1) {
-        mouseTouching = entity.entityType.name;
+        mouseTouching = entity.entityType.name+" ("+entity.health+"/"+entity.maxHealth+")";
         entityTouching = entity;
     }
   }
@@ -604,17 +633,17 @@ function drawingLoop() {
   mctx.strokeStyle = colorString(...cc.energy, 1);
   mctx.lineWidth = 4;
   mctx.strokeRect(mcw / 2 - 8, mch / 2 - 8, 16, 16);
-  if (mouseTouching != 1) {
-    mctx.font = "16px serif";
-    mctx.fillStyle = "#FFFFFFFF";
-    mctx.fillText(mouseTouching, mousePos.x, mousePos.y);
-  }
   if (breaking) {
     pick.drawSelf(pick, mctx, mousePos.x + 8, mousePos.y + 8);
   }
   for (let i=0; i<entities.length; i++) {
     let entity = entities[i]
     entity.drawSelf(mctx, entity.x-view.x+mcan.width/2, entity.y-view.y+mcan.height/2);
+  }
+    if (mouseTouching != 1) {
+    mctx.font = "16px serif";
+    mctx.fillStyle = "#FFFFFFFF";
+    mctx.fillText(mouseTouching, mousePos.x, mousePos.y);
   }
   requestAnimationFrame(drawingLoop);
 }
@@ -670,8 +699,7 @@ function physicsLoop() {
           }
         }
         if (entityTouching != undefined) {
-            entityDrop(entityTouching);
-            entityTouching = undefined;
+            entityTouching.health -= tools[1].n;
         }
     }
   }
@@ -702,17 +730,23 @@ function physicsLoop() {
   for (let i=0; i<entities.length; i++) {
     let entity = entities[i];
     entity.state.func(entity, ...entity.state.args);
-    if (inViewCenteredBounds(entity.x/16, entity.y/16, 2.5)) {
-        entityDrop(entity);
+    if (entity.entityType.canDamageByTouching && inViewCenteredBounds(entity.x/16, entity.y/16, 2.5)) {
+        entity.health --;
     } else if (!inViewCenteredBounds(entity.x/16, entity.y/16, 50)) {
         let index = getIdIndex(entities, entity.id);
         entities.splice(index, 1);
         i --;
     }
+    if (entity.health <= 0) {
+        entityDrop(entity);
+    }
   }
   if (Math.random() < 0.05) {
     if (entities.length < 50) {
-        new Entity(entityTypes.driftingSquare, view.x+(Math.random()*2-1)*mcan.width, view.y+(Math.random()*2-1)*mcan.height);
+        let newEntityX = view.x+(Math.random()*2-1)*mcan.width;
+        let newEntityY = view.y+(Math.random()*2-1)*mcan.height
+        let ents = [entityTypes.driftingSquare, entityTypes.rogueRobot];
+        new Entity(ents[Math.floor(Math.random()*1.2)], newEntityX, newEntityY);
     }
   }
   requestAnimationFrame(physicsLoop);
