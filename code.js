@@ -16,6 +16,17 @@ let inventory = [];
 let selectedBlock;
 let lastSelectedBlockGUI;
 let breaking = 1;
+let entityIdCounter = 0;
+let entities = [];
+let entityTouching = undefined
+
+function wanderBehavior(entity){
+    entity.x += entity.vars[0];
+    entity.y += entity.vars[1];
+    if (Math.random() < 0.001) {
+        entity.vars = [Math.random()*2-1, Math.random()*2-1];
+    }
+}
 
 function drawPick(pick, ctx, x, y) {
   ctx.strokeStyle = toolHandleColor;
@@ -185,6 +196,41 @@ class Chunk {
       }
     }
   }
+}
+
+class EntityType {
+    constructor(name, behavior, startingState, startingVars){
+        this.name = name;
+        this.behavior = behavior;
+        this.startingState = startingState;
+        this.startingVars = startingVars;
+    }
+}
+
+let entityTypes = {
+    driftingSquare: new EntityType(
+        "drifting square",
+        ()=>{},
+        {func: wanderBehavior, args: []},
+        [Math.random()*2-1, Math.random()*2-1]
+    )
+}
+
+class Entity {
+    constructor(entityType, x, y){
+        this.entityType = entityType;
+        this.state = entityType.startingState;
+        this.vars = entityType.startingVars;
+        this.x = x;
+        this.y = y;
+        this.id = entityIdCounter;
+        entityIdCounter ++;
+        entities.push(this);
+    }
+    drawSelf(ctx, x, y){
+        ctx.fillStyle = "white";
+        ctx.fillRect(x, y, 8, 8);
+    }
 }
 
 function randomBetween(min, max) {
@@ -450,6 +496,14 @@ function mousemove(event) {
       }
     }
   }
+  entityTouching = undefined;
+  for (let i=0; i<entities.length; i++) {
+    let entity = entities[i];
+    if (Math.abs(entity.x/16-x)+Math.abs(entity.y/16-y) < 1) {
+        mouseTouching = entity.entityType.name;
+        entityTouching = entity;
+    }
+  }
   mousePos.x = event.x;
   mousePos.y = event.y;
 }
@@ -554,6 +608,10 @@ function drawingLoop() {
   if (breaking) {
     pick.drawSelf(pick, mctx, mousePos.x + 8, mousePos.y + 8);
   }
+  for (let i=0; i<entities.length; i++) {
+    let entity = entities[i]
+    entity.drawSelf(mctx, entity.x-view.x+mcan.width/2, entity.y-view.y+mcan.height/2);
+  }
   requestAnimationFrame(drawingLoop);
 }
 drawingLoop();
@@ -607,6 +665,11 @@ function physicsLoop() {
             }
           }
         }
+        if (entityTouching != undefined) {
+            let index = getIdIndex(entities, entityTouching.id);
+            entities.splice(index, 1);
+            increaseInventoryBlockAmount(Math.floor(Math.random()*inventory.length), 1);
+        }
     }
   }
   mouseWasDown = mouseDown;
@@ -633,6 +696,20 @@ function physicsLoop() {
     view.y += view.velY / boundChecks;
   }
   view.velX *= 0.9;
+  for (let i=0; i<entities.length; i++) {
+    let entity = entities[i];
+    entity.state.func(entity, ...entity.state.args);
+    if (!inViewCenteredBounds(entity.x/16, entity.y/16, 50)) {
+        let index = getIdIndex(entities, entity.id);
+        entities.splice(index, 1);
+        i --;
+    }
+  }
+  if (Math.random() < 0.05) {
+    if (entities.length < 50) {
+        new Entity(entityTypes.driftingSquare, view.x+(Math.random()*2-1)*mcan.width, view.y+(Math.random()*2-1)*mcan.height);
+    }
+  }
   requestAnimationFrame(physicsLoop);
 }
 physicsLoop();
@@ -650,6 +727,15 @@ function inViewCenteredBounds(x, y, dist){
 function getNumIndex(array, num) {
     for (let i=0; i<array.length; i++) {
         if (array[i].n == num) {
+            return i;
+        }
+    }
+    return undefined;
+}
+
+function getIdIndex(array, id) {
+    for (let i=0; i<array.length; i++) {
+        if (array[i].id == id) {
             return i;
         }
     }
