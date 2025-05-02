@@ -199,11 +199,12 @@ class Chunk {
 }
 
 class EntityType {
-    constructor(name, behavior, startingState, startingVars){
+    constructor(name, behavior, startingState, startingVars, drop){
         this.name = name;
         this.behavior = behavior;
         this.startingState = startingState;
         this.startingVars = startingVars;
+        this.drop = drop;
     }
 }
 
@@ -212,7 +213,10 @@ let entityTypes = {
         "drifting square",
         ()=>{},
         {func: wanderBehavior, args: []},
-        [Math.random()*2-1, Math.random()*2-1]
+        [Math.random()*2-1, Math.random()*2-1],
+        ()=>{
+            increaseInventoryNumAmount(weightedArrayPick(primes, 0.3).n, 1);
+        }
     )
 }
 
@@ -666,9 +670,8 @@ function physicsLoop() {
           }
         }
         if (entityTouching != undefined) {
-            let index = getIdIndex(entities, entityTouching.id);
-            entities.splice(index, 1);
-            increaseInventoryBlockAmount(Math.floor(Math.random()*inventory.length), 1);
+            entityDrop(entityTouching);
+            entityTouching = undefined;
         }
     }
   }
@@ -699,7 +702,9 @@ function physicsLoop() {
   for (let i=0; i<entities.length; i++) {
     let entity = entities[i];
     entity.state.func(entity, ...entity.state.args);
-    if (!inViewCenteredBounds(entity.x/16, entity.y/16, 50)) {
+    if (inViewCenteredBounds(entity.x/16, entity.y/16, 2.5)) {
+        entityDrop(entity);
+    } else if (!inViewCenteredBounds(entity.x/16, entity.y/16, 50)) {
         let index = getIdIndex(entities, entity.id);
         entities.splice(index, 1);
         i --;
@@ -746,3 +751,18 @@ function increaseInventoryBlockAmount(index, amount){
     inventory[index].a += amount;
     inventoryGUI.childNodes[index].childNodes[2].innerText = "".concat(inventory[index].a);
 }
+
+function increaseInventoryNumAmount(num, amount){
+    let index = getNumIndex(inventory, num);
+    if (index == undefined) {
+        seenNewBlock(num);
+        index = getNumIndex(inventory, num);
+    }
+    increaseInventoryBlockAmount(index, amount);
+}
+
+function entityDrop(entity){
+    let index = getIdIndex(entities, entity.id);
+    entities.splice(index, 1);
+    entity.entityType.drop();
+};
