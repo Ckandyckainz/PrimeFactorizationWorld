@@ -21,6 +21,7 @@ let entities = [];
 let entityTouching = undefined;
 let laserIdCounter = 0;
 let lasers = [];
+let firingLasers = false;
 
 function wanderBehavior(entity){
     entity.x += entity.vars[0];
@@ -235,7 +236,7 @@ let entityTypes = {
         startingState: {func: wanderBehavior, args: []},
         startingVars: [Math.random()*2-1, Math.random()*2-1],
         drop: ()=>{
-            increaseInventoryNumAmount(weightedArrayPick(primes, 0.3).n, 1000);
+            increaseInventoryNumAmount(weightedArrayPick(primes, 0.3).n, 8);
         },
         drawSelf: (ctx, x, y)=>{
             ctx.fillStyle = "#404040FF";
@@ -269,15 +270,17 @@ class Entity {
 }
 
 class Laser{
-    constructor(x, y, tarX, tarY, isEnemy){
+    constructor(entity, tarX, tarY, isEnemy){
         this.id = laserIdCounter;
         laserIdCounter ++;
         this.isEnemy = isEnemy;
         this.tarX = tarX;
         this.tarY = tarY;
-        this.x = x;
-        this.y = y;
+        this.x = entity.x;
+        this.y = entity.y;
         this.angle = Math.atan2(tarY-this.y, tarX-this.x);
+        this.velX = entity.velX+Math.cos(this.angle)*10;
+        this.velY = entity.velY+Math.sin(this.angle)*10;
         lasers.push(this);
     }
     drawSelf(ctx, x, y){
@@ -754,6 +757,9 @@ function physicsLoop() {
     if (keyDown == "d") {
       view.velX = 4;
     }
+    if (keyDown == "w" && physicsLoopCounter%10 == 0) {
+        firingLasers = !firingLasers;
+    }
   });
   if (!bounds.down) {
     view.velY += 0.1;
@@ -796,14 +802,14 @@ function physicsLoop() {
   }
   for (let i=0; i<lasers.length; i++) {
     let laser = lasers[i];
-    laser.x += Math.cos(laser.angle)*10;
-    laser.y += Math.sin(laser.angle)*10;
+    laser.x += laser.velX;
+    laser.y += laser.velY;
     if (!inViewCenteredBounds(laser.x/16, laser.y/16, 100)) {
         laser.remove();
     }
   }
-  if (physicsLoopCounter%10 == 0) {
-    new Laser(view.x, view.y, view.x-mcan.width/2+mousePos.x, view.y-mcan.height/2+mousePos.y, false);
+  if (physicsLoopCounter%10 == 0 && firingLasers) {
+    new Laser(view, view.x-mcan.width/2+mousePos.x, view.y-mcan.height/2+mousePos.y, false);
   }
   physicsLoopCounter ++;
   requestAnimationFrame(physicsLoop);
