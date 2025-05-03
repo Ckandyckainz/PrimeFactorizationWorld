@@ -18,7 +18,9 @@ let lastSelectedBlockGUI;
 let breaking = 1;
 let entityIdCounter = 0;
 let entities = [];
-let entityTouching = undefined
+let entityTouching = undefined;
+let laserIdCounter = 0;
+let lasers = [];
 
 function wanderBehavior(entity){
     entity.x += entity.vars[0];
@@ -263,6 +265,36 @@ class Entity {
     }
     drawSelf(ctx, x, y){
         this.entityType.drawSelf(ctx, x, y);
+    }
+}
+
+class Laser{
+    constructor(x, y, tarX, tarY, isEnemy){
+        this.id = laserIdCounter;
+        laserIdCounter ++;
+        this.isEnemy = isEnemy;
+        this.tarX = tarX;
+        this.tarY = tarY;
+        this.x = x;
+        this.y = y;
+        this.angle = Math.atan2(tarY-this.y, tarX-this.x);
+        lasers.push(this);
+    }
+    drawSelf(ctx, x, y){
+        if (this.isEnemy) {
+            ctx.strokeStyle = "#ff0000";
+        } else {
+            ctx.strokeStyle = "#ffffff";
+        }
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(x-Math.cos(this.angle)*10, y-Math.sin(this.angle)*10);
+        ctx.lineTo(x+Math.cos(this.angle)*10, y+Math.sin(this.angle)*10);
+        ctx.stroke();
+    }
+    remove(){
+        let index = getIdIndex(lasers, this.id);
+        lasers.splice(index, 1);
     }
 }
 
@@ -628,6 +660,10 @@ function drawingLoop() {
   for (let i = 0; i < 512; i++) {
     mctx.putImageData(map[i].imgdt, (i % 16) * 256 - view.x + mcw / 2, Math.floor(i / 16) * 256 - view.y + mch / 2);
   }
+  for (let i=0; i<lasers.length; i++) {
+    let laser = lasers[i];
+    laser.drawSelf(mctx, laser.x-view.x+mcan.width/2, laser.y-view.y+mcan.height/2);
+  }
   mctx.fillStyle = colorString(...cc.body, 1);
   mctx.fillRect(mcw / 2 - 16, mch / 2 - 16, 32, 32);
   mctx.strokeStyle = colorString(...cc.energy, 1);
@@ -649,6 +685,7 @@ function drawingLoop() {
 }
 drawingLoop();
 
+let physicsLoopCounter = 0;
 function physicsLoop() {
   if (mouseDown) {
     let x = Math.floor((view.x - mcw / 2 + mousePos.x) / 16);
@@ -737,8 +774,16 @@ function physicsLoop() {
         entities.splice(index, 1);
         i --;
     }
+    for (let j=0; j<lasers.length; j++) {
+        let laser = lasers[j];
+        if (inCenteredBounds(entity, laser.x/16, laser.y/16, 2.5)) {
+            entity.health -= 2;
+            console.log(323);
+        }
+    }
     if (entity.health <= 0) {
         entityDrop(entity);
+        i --;
     }
   }
   if (Math.random() < 0.05) {
@@ -749,6 +794,18 @@ function physicsLoop() {
         new Entity(ents[Math.floor(Math.random()*1.2)], newEntityX, newEntityY);
     }
   }
+  for (let i=0; i<lasers.length; i++) {
+    let laser = lasers[i];
+    laser.x += Math.cos(laser.angle)*10;
+    laser.y += Math.sin(laser.angle)*10;
+    if (!inViewCenteredBounds(laser.x/16, laser.y/16, 100)) {
+        laser.remove();
+    }
+  }
+  if (physicsLoopCounter%10 == 0) {
+    new Laser(view.x, view.y, view.x-mcan.width/2+mousePos.x, view.y-mcan.height/2+mousePos.y, false);
+  }
+  physicsLoopCounter ++;
   requestAnimationFrame(physicsLoop);
 }
 physicsLoop();
@@ -761,6 +818,12 @@ function inViewCenteredBounds(x, y, dist){
     let viewBlockX = Math.floor(view.x/16);
     let viewBlockY = Math.floor(view.y/16);
     return x > viewBlockX-dist && y > viewBlockY-dist && x < viewBlockX+dist-1 && y < viewBlockY+dist-1;
+}
+
+function inCenteredBounds(center, x, y, dist){
+    let centerBlockX = Math.floor(center.x/16);
+    let centerBlockY = Math.floor(center.y/16);
+    return x > centerBlockX-dist && y > centerBlockY-dist && x < centerBlockX+dist-1 && y < centerBlockY+dist-1;
 }
 
 function getNumIndex(array, num) {
