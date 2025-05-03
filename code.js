@@ -11,6 +11,7 @@ mcan.style.width = "100%";
 mcan.style.height = "100%";
 let mctx = mcan.getContext("2d");
 let toolHandleColor = colorString(Math.random() * 0.3 + 0.2, Math.random() * 0.3 + 0.2, Math.random() * 0.3 + 0.2, 1);
+let physicsLoopCounter = 0;
 let jumping = false;
 let inventory = [];
 let selectedBlock;
@@ -232,7 +233,11 @@ let entityTypes = {
     }),
     rogueRobot: new EntityType({
         name: "rogue robot",
-        behavior: ()=>{},
+        behavior: (entity)=>{
+            if (physicsLoopCounter%10 == 0 && inViewCenteredBounds(entity.x/16, entity.y/16, 20)) {
+                new Laser(entity, view.x, view.y, true);
+            }
+        },
         startingState: {func: wanderBehavior, args: []},
         startingVars: [Math.random()*2-1, Math.random()*2-1],
         drop: ()=>{
@@ -260,6 +265,8 @@ class Entity {
         this.health = this.maxHealth;
         this.x = x;
         this.y = y;
+        this.velX = 0;
+        this.velY = 0;
         this.id = entityIdCounter;
         entityIdCounter ++;
         entities.push(this);
@@ -509,13 +516,19 @@ map.forEach((chunk) => {
   chunk.resetImgdt();
 });
 
-let view = {
-  x: 2000,
-  y: -32,
-  velX: 0,
-  velY: 0,
-  onGround: true
-};
+let view;
+function respawnView() {
+    view = {
+        x: 2000,
+        y: -256,
+        velX: 0,
+        velY: 0,
+        onGround: true,
+        maxHealth: 500,
+        health: 500
+      };
+}
+respawnView();
 let keysDown = [];
 
 function keypress(event) {
@@ -684,11 +697,14 @@ function drawingLoop() {
     mctx.fillStyle = "#FFFFFFFF";
     mctx.fillText(mouseTouching, mousePos.x, mousePos.y);
   }
+  mctx.fillStyle = "#404040FF";
+  mctx.fillRect(mcan.width*0.9, mcan.height*0.015, mcan.width*0.09, mcan.height*0.015);
+  mctx.fillStyle = "green";
+  mctx.fillRect(mcan.width*0.9, mcan.height*0.015, mcan.width*0.09*view.health/view.maxHealth, mcan.height*0.015);
   requestAnimationFrame(drawingLoop);
 }
 drawingLoop();
 
-let physicsLoopCounter = 0;
 function physicsLoop() {
   if (mouseDown) {
     let x = Math.floor((view.x - mcw / 2 + mousePos.x) / 16);
@@ -772,6 +788,7 @@ function physicsLoop() {
   view.velX *= 0.9;
   for (let i=0; i<entities.length; i++) {
     let entity = entities[i];
+    entity.entityType.behavior(entity);
     entity.state.func(entity, ...entity.state.args);
     if (entity.entityType.canDamageByTouching && inViewCenteredBounds(entity.x/16, entity.y/16, 2.5)) {
         entity.health --;
@@ -782,9 +799,8 @@ function physicsLoop() {
     }
     for (let j=0; j<lasers.length; j++) {
         let laser = lasers[j];
-        if (inCenteredBounds(entity, laser.x/16, laser.y/16, 2.5)) {
+        if (inCenteredBounds(entity, laser.x/16, laser.y/16, 2.5) && !laser.isEnemy) {
             entity.health -= 2;
-            console.log(323);
         }
     }
     if (entity.health <= 0) {
@@ -804,12 +820,21 @@ function physicsLoop() {
     let laser = lasers[i];
     laser.x += laser.velX;
     laser.y += laser.velY;
-    if (!inViewCenteredBounds(laser.x/16, laser.y/16, 100)) {
+    if (inViewCenteredBounds(laser.x/16, laser.y/16, 2.5) && laser.isEnemy) {
+        view.health --;
+    } else if (!inViewCenteredBounds(laser.x/16, laser.y/16, 100)) {
         laser.remove();
     }
   }
   if (physicsLoopCounter%10 == 0 && firingLasers) {
     new Laser(view, view.x-mcan.width/2+mousePos.x, view.y-mcan.height/2+mousePos.y, false);
+  }
+  if (view.health <= 0) {
+    respawnView();
+  }
+  view.health += 0.1;
+  if (view.health > view.maxHealth) {
+    view.health = view.maxHealth;
   }
   physicsLoopCounter ++;
   requestAnimationFrame(physicsLoop);
