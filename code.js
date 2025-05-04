@@ -216,13 +216,13 @@ class EntityType {
 }
 
 let entityTypes = {
-    driftingSquare: new EntityType({
-        name: "drifting square",
+    energyParticle: new EntityType({
+        name: "energy particle",
         behavior: ()=>{},
         startingState: {func: wanderBehavior, args: []},
         startingVars: [Math.random()*2-1, Math.random()*2-1],
         drop: ()=>{
-            increaseInventoryNumAmount(weightedArrayPick(primes, 0.3).n, 1);
+            view.energy ++;
         },
         drawSelf: (ctx, x, y)=>{
             ctx.fillStyle = "white";
@@ -234,8 +234,8 @@ let entityTypes = {
     rogueRobot: new EntityType({
         name: "rogue robot",
         behavior: (entity)=>{
-            if (physicsLoopCounter%10 == 0 && inViewCenteredBounds(entity.x/16, entity.y/16, 20)) {
-                new Laser(entity, view.x, view.y, true);
+            if (physicsLoopCounter%20 == 0 && inViewCenteredBounds(entity.x/16, entity.y/16, 20)) {
+                new Laser(entity, view.x, view.y, true, 5);
             }
         },
         startingState: {func: wanderBehavior, args: []},
@@ -251,7 +251,7 @@ let entityTypes = {
             ctx.fillStyle = "#404040FF";
             ctx.fillRect(x-8, y-8, 16, 16);
         },
-        maxHealth: 100,
+        maxHealth: 50,
         canDamageByTouching: false
     })
 }
@@ -277,24 +277,28 @@ class Entity {
 }
 
 class Laser{
-    constructor(entity, tarX, tarY, isEnemy){
+    constructor(entity, tarX, tarY, isEnemy, speed){
         this.id = laserIdCounter;
         laserIdCounter ++;
         this.isEnemy = isEnemy;
+        this.speed = speed;
         this.tarX = tarX;
         this.tarY = tarY;
         this.x = entity.x;
         this.y = entity.y;
+        this.maxDamage = 1;
+        this.timeCounter = 0;
+        this.opacity = 1;
         this.angle = Math.atan2(tarY-this.y, tarX-this.x);
-        this.velX = entity.velX+Math.cos(this.angle)*10;
-        this.velY = entity.velY+Math.sin(this.angle)*10;
+        this.velX = entity.velX+Math.cos(this.angle)*speed;
+        this.velY = entity.velY+Math.sin(this.angle)*speed;
         lasers.push(this);
     }
     drawSelf(ctx, x, y){
         if (this.isEnemy) {
-            ctx.strokeStyle = "#ff0000";
+            ctx.strokeStyle = colorString(1, 0, 0, this.opacity);
         } else {
-            ctx.strokeStyle = "#ffffff";
+            ctx.strokeStyle = colorString(1, 1, 1, this.opacity);
         }
         ctx.lineWidth = 5;
         ctx.beginPath();
@@ -305,6 +309,17 @@ class Laser{
     remove(){
         let index = getIdIndex(lasers, this.id);
         lasers.splice(index, 1);
+    }
+    physics(){
+        this.x += this.velX;
+        this.y += this.velY;
+        if (this.timeCounter > 30) {
+            this.opacity -= 1/30;
+        }
+        if (this.opacity <= 0) {
+            this.remove();
+        }
+        this.timeCounter ++;
     }
 }
 
@@ -524,8 +539,10 @@ function respawnView() {
         velX: 0,
         velY: 0,
         onGround: true,
-        maxHealth: 500,
-        health: 500
+        maxHealth: 100,
+        health: 100,
+        maxEnergy: 50,
+        energy: 50
       };
 }
 respawnView();
@@ -581,7 +598,7 @@ function mousemove(event) {
   for (let i=0; i<entities.length; i++) {
     let entity = entities[i];
     if (Math.abs(entity.x/16-x)+Math.abs(entity.y/16-y) < 1) {
-        mouseTouching = entity.entityType.name+" ("+entity.health+"/"+entity.maxHealth+")";
+        mouseTouching = entity.entityType.name+" ("+Math.ceil(entity.health)+"/"+entity.maxHealth+")";
         entityTouching = entity;
     }
   }
@@ -699,8 +716,11 @@ function drawingLoop() {
   }
   mctx.fillStyle = "#404040FF";
   mctx.fillRect(mcan.width*0.9, mcan.height*0.015, mcan.width*0.09, mcan.height*0.015);
+  mctx.fillRect(mcan.width*0.9, mcan.height*0.04, mcan.width*0.09, mcan.height*0.015);
   mctx.fillStyle = "green";
   mctx.fillRect(mcan.width*0.9, mcan.height*0.015, mcan.width*0.09*view.health/view.maxHealth, mcan.height*0.015);
+  mctx.fillStyle = "blue";
+  mctx.fillRect(mcan.width*0.9, mcan.height*0.04, mcan.width*0.09*view.energy/view.maxEnergy, mcan.height*0.015);
   requestAnimationFrame(drawingLoop);
 }
 drawingLoop();
@@ -792,7 +812,7 @@ function physicsLoop() {
     entity.state.func(entity, ...entity.state.args);
     if (entity.entityType.canDamageByTouching && inViewCenteredBounds(entity.x/16, entity.y/16, 2.5)) {
         entity.health --;
-    } else if (!inViewCenteredBounds(entity.x/16, entity.y/16, 50)) {
+    } else if (!inViewCenteredBounds(entity.x/16, entity.y/16, Math.ceil(mcan.width/8))) {
         let index = getIdIndex(entities, entity.id);
         entities.splice(index, 1);
         i --;
@@ -800,7 +820,7 @@ function physicsLoop() {
     for (let j=0; j<lasers.length; j++) {
         let laser = lasers[j];
         if (inCenteredBounds(entity, laser.x/16, laser.y/16, 2.5) && !laser.isEnemy) {
-            entity.health -= 2;
+            entity.health -= laser.maxDamage*laser.opacity;
         }
     }
     if (entity.health <= 0) {
@@ -808,34 +828,38 @@ function physicsLoop() {
         i --;
     }
   }
-  if (Math.random() < 0.05) {
-    if (entities.length < 50) {
-        let newEntityX = view.x+(Math.random()*2-1)*mcan.width;
-        let newEntityY = view.y+(Math.random()*2-1)*mcan.height
-        let ents = [entityTypes.driftingSquare, entityTypes.rogueRobot];
-        new Entity(ents[Math.floor(Math.random()*1.2)], newEntityX, newEntityY);
+  if (Math.random() < 0.2) {
+    if (entities.length < 200) {
+        if (Math.random() < 0.05) {
+            let newEntityX = view.x+((Math.floor(Math.random()*2)*2-1)*(Math.random()+1))*mcan.width;
+            let newEntityY = view.y+((Math.floor(Math.random()*2)*2-1)*(Math.random()+1))*mcan.height;
+            new Entity(entityTypes.rogueRobot, newEntityX, newEntityY);
+        } else {
+            let newEntityX = view.x+(Math.random()*4-2)*mcan.width;
+            let newEntityY = view.y+(Math.random()*4-2)*mcan.height;
+            new Entity(entityTypes.energyParticle, newEntityX, newEntityY);
+        }
     }
   }
   for (let i=0; i<lasers.length; i++) {
     let laser = lasers[i];
-    laser.x += laser.velX;
-    laser.y += laser.velY;
+    laser.physics();
     if (inViewCenteredBounds(laser.x/16, laser.y/16, 2.5) && laser.isEnemy) {
-        view.health --;
+        view.health -= laser.maxDamage*laser.opacity;
     } else if (!inViewCenteredBounds(laser.x/16, laser.y/16, 100)) {
         laser.remove();
     }
   }
-  if (physicsLoopCounter%10 == 0 && firingLasers) {
-    new Laser(view, view.x-mcan.width/2+mousePos.x, view.y-mcan.height/2+mousePos.y, false);
+  if (physicsLoopCounter%20 == 0 && firingLasers && view.energy >= 0) {
+    new Laser(view, view.x-mcan.width/2+mousePos.x, view.y-mcan.height/2+mousePos.y, false, 5);
+    view.energy --;
   }
   if (view.health <= 0) {
     respawnView();
   }
   view.health += 0.1;
-  if (view.health > view.maxHealth) {
-    view.health = view.maxHealth;
-  }
+  view.health = boundVar(view.health, 0, view.maxHealth);
+  view.energy = boundVar(view.energy, 0, view.maxEnergy);
   physicsLoopCounter ++;
   requestAnimationFrame(physicsLoop);
 }
@@ -894,3 +918,13 @@ function entityDrop(entity){
     entities.splice(index, 1);
     entity.entityType.drop();
 };
+
+function boundVar(variable, min, max){
+    if (variable < min) {
+        return min;
+    } else if (variable > max) {
+        return max;
+    } else {
+        return variable;
+    }
+}
