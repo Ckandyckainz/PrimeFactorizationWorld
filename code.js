@@ -202,67 +202,60 @@ class Chunk {
   }
 }
 
-class EntityType {
-    constructor(ob){
-        this.name = ob.name;
-        this.behavior = ob.behavior;
-        this.startingState = ob.startingState;
-        this.startingVars = ob.startingVars;
-        this.drop = ob.drop;
-        this.drawSelf = ob.drawSelf;
-        this.maxHealth = ob.maxHealth;
-        this.canDamageByTouching = ob.canDamageByTouching;
-    }
-}
-
 let entityTypes = {
-    energyParticle: new EntityType({
+    energyParticle: {
         name: "energy particle",
         behavior: ()=>{},
         startingState: {func: wanderBehavior, args: []},
         startingVars: [Math.random()*2-1, Math.random()*2-1],
-        drop: ()=>{
+        drop: (entity)=>{
             view.energy ++;
         },
-        drawSelf: (ctx, x, y)=>{
+        drawSelf: (ctx, x, y, entity)=>{
             ctx.fillStyle = "white";
             ctx.fillRect(x-4, y-4, 8, 8);
         },
         maxHealth: 1,
+        constructor: (entity)=>{},
         canDamageByTouching: true
-    }),
-    rogueRobot: new EntityType({
+    },
+    rogueRobot: {
         name: "rogue robot",
         behavior: (entity)=>{
-            if (physicsLoopCounter%20 == 0 && inViewCenteredBounds(entity.x/16, entity.y/16, 20)) {
-                new Laser(entity, view.x, view.y, true, 5);
+            if (physicsLoopCounter%(20-entity.ob.level*3) == 0 && inViewCenteredBounds(entity.x/16, entity.y/16, 20)) {
+                new Laser(entity, view.x, view.y, true, 5+entity.ob.level*3, [1, entity.ob.level/5, 0]);
             }
         },
         startingState: {func: wanderBehavior, args: []},
         startingVars: [Math.random()*2-1, Math.random()*2-1],
-        drop: ()=>{
-            increaseInventoryNumAmount(weightedArrayPick(primes, 0.3).n, 8);
+        drop: (entity)=>{
+            increaseInventoryNumAmount(weightedArrayPick(primes, 0.3, entity.ob.level*4).n, 8+entity.ob.level*16);
         },
-        drawSelf: (ctx, x, y)=>{
+        drawSelf: (ctx, x, y, entity)=>{
             ctx.fillStyle = "#404040FF";
             ctx.fillRect(x-16, y-16, 32, 32);
-            ctx.fillStyle = "red";
+            ctx.fillStyle = colorString(1, entity.ob.level/5, 0, 1);
             ctx.fillRect(x-12, y-12, 24, 24);
             ctx.fillStyle = "#404040FF";
             ctx.fillRect(x-8, y-8, 16, 16);
         },
         maxHealth: 50,
+        constructor: (entity)=>{
+            entity.maxHealth = entity.ob.level*50+50;
+            entity.health = entity.maxHealth;
+        },
         canDamageByTouching: false
-    })
+    }
 }
 
 class Entity {
-    constructor(entityType, x, y){
+    constructor(entityType, x, y, ob){
         this.entityType = entityType;
         this.state = entityType.startingState;
         this.vars = entityType.startingVars;
         this.maxHealth = this.entityType.maxHealth;
         this.health = this.maxHealth;
+        this.ob = ob;
         this.x = x;
         this.y = y;
         this.velX = 0;
@@ -272,16 +265,17 @@ class Entity {
         entities.push(this);
     }
     drawSelf(ctx, x, y){
-        this.entityType.drawSelf(ctx, x, y);
+        this.entityType.drawSelf(ctx, x, y, this);
     }
 }
 
 class Laser{
-    constructor(entity, tarX, tarY, isEnemy, speed){
+    constructor(entity, tarX, tarY, isEnemy, speed, color){
         this.id = laserIdCounter;
         laserIdCounter ++;
         this.isEnemy = isEnemy;
         this.speed = speed;
+        this.color = color;
         this.tarX = tarX;
         this.tarY = tarY;
         this.x = entity.x;
@@ -290,16 +284,12 @@ class Laser{
         this.timeCounter = 0;
         this.opacity = 1;
         this.angle = Math.atan2(tarY-this.y, tarX-this.x);
-        this.velX = entity.velX+Math.cos(this.angle)*speed;
-        this.velY = entity.velY+Math.sin(this.angle)*speed;
+        this.velX = Math.cos(this.angle)*speed;
+        this.velY = Math.sin(this.angle)*speed;
         lasers.push(this);
     }
     drawSelf(ctx, x, y){
-        if (this.isEnemy) {
-            ctx.strokeStyle = colorString(1, 0, 0, this.opacity);
-        } else {
-            ctx.strokeStyle = colorString(1, 1, 1, this.opacity);
-        }
+        ctx.strokeStyle = colorString(...this.color, this.opacity);
         ctx.lineWidth = 5;
         ctx.beginPath();
         ctx.moveTo(x-Math.cos(this.angle)*10, y-Math.sin(this.angle)*10);
@@ -313,8 +303,8 @@ class Laser{
     physics(){
         this.x += this.velX;
         this.y += this.velY;
-        if (this.timeCounter > 30) {
-            this.opacity -= 1/30;
+        if (this.timeCounter > 20) {
+            this.opacity -= 1/20;
         }
         if (this.opacity <= 0) {
             this.remove();
@@ -332,7 +322,7 @@ function colorString(r, g, b, a) {
   return "#" + color.toString(16).padStart(8, "0");
 }
 
-function weightedArrayPick(array, weight) {
+function weightedArrayPick(array, weight, offset) {
   let choosing = true;
   let counter = -1;
   while (choosing) {
@@ -341,7 +331,7 @@ function weightedArrayPick(array, weight) {
       choosing = false;
     }
   }
-  return array[counter % array.length];
+  return array[(counter+offset) % array.length];
 }
 
 function setBlock(x, y, n) {
@@ -830,14 +820,14 @@ function physicsLoop() {
   }
   if (Math.random() < 0.2) {
     if (entities.length < 200) {
-        if (Math.random() < 0.05) {
+        if (Math.random() < 0.1) {
             let newEntityX = view.x+((Math.floor(Math.random()*2)*2-1)*(Math.random()+1))*mcan.width;
             let newEntityY = view.y+((Math.floor(Math.random()*2)*2-1)*(Math.random()+1))*mcan.height;
-            new Entity(entityTypes.rogueRobot, newEntityX, newEntityY);
+            newEntity(entityTypes.rogueRobot, newEntityX, newEntityY, {level: Math.floor(Math.random()*pick.n/5)});
         } else {
             let newEntityX = view.x+(Math.random()*4-2)*mcan.width;
             let newEntityY = view.y+(Math.random()*4-2)*mcan.height;
-            new Entity(entityTypes.energyParticle, newEntityX, newEntityY);
+            newEntity(entityTypes.energyParticle, newEntityX, newEntityY, {});
         }
     }
   }
@@ -850,8 +840,8 @@ function physicsLoop() {
         laser.remove();
     }
   }
-  if (physicsLoopCounter%20 == 0 && firingLasers && view.energy >= 0) {
-    new Laser(view, view.x-mcan.width/2+mousePos.x, view.y-mcan.height/2+mousePos.y, false, 5);
+  if (physicsLoopCounter%20 == 0 && firingLasers && view.energy > 0) {
+    new Laser(view, view.x-mcan.width/2+mousePos.x, view.y-mcan.height/2+mousePos.y, false, 5, [1, 1, 1]);
     view.energy --;
   }
   if (view.health <= 0) {
@@ -916,7 +906,7 @@ function increaseInventoryNumAmount(num, amount){
 function entityDrop(entity){
     let index = getIdIndex(entities, entity.id);
     entities.splice(index, 1);
-    entity.entityType.drop();
+    entity.entityType.drop(entity);
 };
 
 function boundVar(variable, min, max){
@@ -927,4 +917,10 @@ function boundVar(variable, min, max){
     } else {
         return variable;
     }
+}
+
+function newEntity(entityType, x, y, ob){
+    let newEntity = new Entity(entityType, x, y, ob);
+    newEntity.entityType.constructor(newEntity);
+    return newEntity;
 }
