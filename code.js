@@ -1,6 +1,7 @@
 // GitHub version
 
-let mcan = document.getElementById("mcan");
+let mcan = document.getElementById("mcan"); // main canvas
+let pcan = document.getElementById("pcan"); // preparation canvas
 let inventoryGUI = document.getElementById("inventory");
 let toolsGUI = document.getElementById("tools");
 let mcw = window.innerWidth;
@@ -9,7 +10,10 @@ mcan.width = mcw;
 mcan.height = mch;
 mcan.style.width = "100%";
 mcan.style.height = "100%";
-let mctx = mcan.getContext("2d");
+let mctx = mcan.getContext("2d", {willReadFrequently: true});
+pcan.width = 1000;
+pcan.height = 1000;
+let pctx = pcan.getContext("2d", {willReadFrequently: true});
 let toolHandleColor = colorString(Math.random() * 0.3 + 0.2, Math.random() * 0.3 + 0.2, Math.random() * 0.3 + 0.2, 1);
 let physicsLoopCounter = 0;
 let jumping = false;
@@ -23,6 +27,188 @@ let entityTouching = undefined;
 let laserIdCounter = 0;
 let lasers = [];
 let firingLasers = false;
+
+let chunksPerScreenW = Math.ceil(mcan.width/256)+2;
+let chunksPerScreenH = Math.ceil(mcan.height/256)+4;
+
+class TreeData{
+    constructor(){
+        this.branchColor = [Math.random(), Math.random(), Math.random()];
+        this.tiers = randomBetween(3, 8, 1);
+        this.growth = randomBetween(2, 4, 1);
+        this.angleVary = randomBetween(Math.PI/8, Math.PI/2, 0.01);
+        this.branchThickness = randomBetween(6, 19, 1);
+        this.branchThicknessProportions = randomBetween(1.5, 2, 0.01);
+        this.branchBend = (Math.random()*3-1.5)+1;
+        this.branchBendVary = Math.random();
+        this.branchWobble = Math.random()*8;
+        this.tierSmoothness = Math.random();
+        this.segmentExtend = randomBetween(5, 101, 1);
+        this.branchColorVary = Math.random()*0.8;
+        this.branchSegments = randomBetween(3, 21, 1);
+        this.branchSegmentsVary = randomBetween(0, this.branchSegments/2, 1);
+        this.branchSegmentLengthVary = Math.random()*0.7;
+        this.branchLengthVary = Math.random()*0.7;
+        this.branchContinue = Math.random();
+        this.branchWaveSize = Math.random()*4;
+        this.branchWaveLength = Math.random()*1.5;
+        this.branchWaveSizeVary = Math.random()/2;
+        this.branchWaveLengthVary = Math.random()/2;
+        this.ld = new LeafData();
+    }
+}
+
+class Tree{
+    constructor(treeData, x, y){
+        this.treeData = treeData;
+        this.x = x;
+        this.y = y;
+    }
+}
+
+class LeafData{
+    constructor(){
+        this.leafColor = [Math.random(), Math.random(), Math.random(), Math.random()*0.5+0.5];
+        this.leafTransparencyVary = Math.random()*0.6;
+        this.leafClumpTransparencyVary = Math.random()*0.6;
+        this.leafColorVary = ((Math.random()*4)**0.5)/2;
+        this.leafClumpColorVary = ((Math.random()*4)**0.5)/2;
+        this.leafClumpSpread = ((Math.random()*9)**0.5)/3;
+        this.leafClumpAmount = Math.random()*4+1;
+        this.leafClumpAngleVary = randomBetween(Math.PI/8, Math.PI/2, 0.01);
+        this.leafAngleVary = randomBetween(Math.PI/8, Math.PI/2, 0.01);
+        this.leafSizeVary = Math.random()*0.5;
+        this.leafClumpSizeVary = Math.random()*0.5;
+        this.leafPoints = randomBetween(1, 9, 1);
+        this.startInnerD = randomBetween(3, 9, 0.01);
+        this.startInnerDVary = randomBetween(0.5, 1.5, 0.01);
+        this.innerOuterD = randomBetween(3, 9, 0.01);
+        this.innerOuterDVary = randomBetween(0.5, 1.5, 0.01);
+        this.innerSpreadAngle = randomBetween(Math.PI/4, Math.PI*1.5, 0.01);
+        this.innerSpreadAngleVary = randomBetween(0.5, 1.5, 0.01);
+        this.innerAngleVary = Math.random()*this.innerSpreadAngle/this.leafPoints/2;
+        this.outerAngleVary = Math.random()*this.innerSpreadAngle/this.leafPoints/2;
+    }
+}
+
+function drawTriangle(ctx, x1, y1, x2, y2, x3, y3){
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.lineTo(x3, y3);
+    ctx.fill();
+}
+
+function drawTree(treeData, ctx, m, x, y, tX, tY, trunkY, light){
+    drawBranch(treeData, 0, Math.PI/-2, Math.PI/-2, x, y, tX, tY, ctx, m, trunkY, light, 0);
+}
+
+function drawBranch(td, tier, angle, targetAngle, x, y, tX, tY, ctx, m, trunkY, light, waveCounter){
+    let bm = 1+randomBetween(-td.branchLengthVary, td.branchLengthVary, 0.01);
+    let s = td.branchSegments+randomBetween(-1*td.branchSegmentsVary, td.branchSegmentsVary, 1);
+    let z = (trunkY*5-1)/4;
+    let a = 1.4-trunkY;
+    let b = trunkY-0.4;
+    let xCounter = x;
+    let yCounter = y;
+    let currentAngle = angle;
+    let lastWobble = 0;
+    let wave = waveCounter;
+    let bwsm = 0;
+    let bwlm = 0;
+    let oldBwsm = 0;
+    let oldBwlm = 0;
+    for (let i=0; i<s; i++) {
+        oldBwsm = bwsm;
+        oldBwlm = bwlm;
+        bwsm = 1+Math.random()*td.branchWaveSizeVary;
+        bwlm = 1+Math.random()*td.branchWaveLengthVary;
+        let slm = 1+randomBetween(-td.branchSegmentLengthVary, td.branchSegmentLengthVary, 0.01);
+        let r0 = (td.branchColor[0]*z*a+light[0]*b)*(1-Math.random()*td.branchColorVary);
+        let g0 = td.branchColor[1]*z*a+light[1]*b*(1-Math.random()*td.branchColorVary);
+        let b0 = td.branchColor[2]*z*a+light[2]*b*(1-Math.random()*td.branchColorVary);
+        ctx.strokeStyle = colorString(r0, g0, b0, 1);
+        ctx.lineWidth = td.branchThickness/(td.branchThicknessProportions**(tier+i*td.tierSmoothness/s));
+        ctx.beginPath();
+        ctx.moveTo(xCounter*m+tX+Math.sin(wave*td.branchWaveLength*oldBwlm)*td.branchWaveSize*oldBwsm, yCounter*m+tY);
+        let wobble = randomBetween(-1*td.branchWobble, td.branchWobble, 0.01);
+        wave ++;
+        currentAngle += ((targetAngle-angle)+wobble-lastWobble)/s;
+        lastWobble = wobble;
+        xCounter += Math.cos(currentAngle)*slm*bm/td.tiers/s/2;
+        yCounter += Math.sin(currentAngle)*slm*bm/td.tiers/s/2;
+        let xExtend = xCounter+Math.cos(currentAngle)*slm*bm/td.tiers/td.segmentExtend;
+        let yExtend = yCounter+Math.sin(currentAngle)*slm*bm/td.tiers/td.segmentExtend;
+        ctx.lineTo(xExtend*m+tX+Math.sin(wave*td.branchWaveLength*bwlm)*td.branchWaveSize*bwsm, yExtend*m+tY);
+        ctx.stroke();
+        if (Math.random()*tier/td.tiers > td.ld.leafClumpSpread) {
+            if (Math.random() < 1/2/td.ld.leafClumpAmount) {
+                drawLeafClump(ctx, td.ld, m, xCounter, yCounter, tX, tY, trunkY, light, currentAngle);
+            }
+        }
+    }
+    if (td.tiers > tier) {
+        for (let i=0; i<randomBetween(td.growth-1, td.growth+1, 1); i++) {
+            let branchContinue = false;
+            if (i == 0) {
+                if (Math.random() > td.branchContinue) {
+                    branchContinue = true;
+                }
+            }
+            let newTargetAngle = targetAngle;
+            if (!branchContinue) {
+                newTargetAngle = randomBetween(currentAngle-td.angleVary, currentAngle+td.angleVary, 0.01);
+            }
+            let branchBend = td.branchBend+randomBetween(-1*td.branchBendVary, td.branchBendVary, 0.01);
+            let startingAngle = currentAngle+(newTargetAngle-currentAngle)*branchBend;
+            drawBranch(td, tier+1, startingAngle, newTargetAngle, xCounter, yCounter, tX, tY, ctx, m, trunkY, light, wave);
+        }
+    }
+}
+
+function drawLeafClump(ctx, ld, m, x, y, tX, tY, trunkY, light, angle){
+    let clumpColor = Math.random()*ld.leafClumpColorVary;
+    let clumpAngleVary = randomBetween(-1*ld.leafClumpAngleVary, ld.leafClumpAngleVary, 0.01);
+    let clumpSizeVary = randomBetween(1-ld.leafClumpSizeVary, 1+ld.leafClumpSizeVary, 0.01);
+    let clumpTransparencyVary = Math.random()*ld.leafClumpTransparencyVary;
+    let z = (trunkY*5-1)/4;
+    let a = 1.4-trunkY;
+    let b = trunkY-0.4;
+    for (let i=0; i<ld.leafClumpAmount; i++) {
+        let am = angle+clumpAngleVary+randomBetween(-1*ld.leafAngleVary, ld.leafAngleVary, 0.01);
+        let sm = clumpSizeVary+randomBetween(1-ld.leafSizeVary, 1+ld.leafSizeVary, 0.01);
+        let r0 = (ld.leafColor[0]*z*a+light[0]*b)*(1-Math.random()*ld.leafColorVary*clumpColor);
+        let g0 = (ld.leafColor[1]*z*a+light[1]*b)*(1-Math.random()*ld.leafColorVary*clumpColor);
+        let b0 = (ld.leafColor[2]*z*a+light[2]*b)*(1-Math.random()*ld.leafColorVary*clumpColor);
+        let a0 = ld.leafColor[3]-clumpTransparencyVary*Math.random()*ld.leafTransparencyVary;
+        let point1 = {
+            x: x*m+Math.cos(ld.innerSpreadAngle*0/(ld.leafPoints+1)-ld.innerSpreadAngle/2+am)*ld.startInnerD*sm+tX,
+            y: y*m+Math.sin(ld.innerSpreadAngle*0/(ld.leafPoints+1)-ld.innerSpreadAngle/2+am)*ld.startInnerD*sm+tY,
+            angle: ld.innerSpreadAngle*0/(ld.leafPoints+1)-ld.innerSpreadAngle/2+am
+        };
+        ctx.fillStyle = colorString(r0, g0, b0, a0);
+        for (let j=0; j<ld.leafPoints; j++) {
+            let point2 = {
+                x: x*m+Math.cos(ld.innerSpreadAngle*(j+1)/(ld.leafPoints+1)-ld.innerSpreadAngle/2+am)*ld.startInnerD*sm+tX,
+                y: y*m+Math.sin(ld.innerSpreadAngle*(j+1)/(ld.leafPoints+1)-ld.innerSpreadAngle/2+am)*ld.startInnerD*sm+tY,
+                angle: ld.innerSpreadAngle*(j+1)/(ld.leafPoints+1)-ld.innerSpreadAngle/2+am
+            };
+            ctx.beginPath();
+            ctx.moveTo(x*m+tX, y*m+tY);
+            ctx.lineTo(point1.x, point1.y);
+            ctx.lineTo(point2.x, point2.y);
+            ctx.fill();
+            toX = x*m+Math.cos((point1.angle+point2.angle)/2)*(ld.startInnerD+ld.innerOuterD)*sm+tX;
+            toY = y*m+Math.sin((point1.angle+point2.angle)/2)*(ld.startInnerD+ld.innerOuterD)*sm+tY;
+            ctx.beginPath();
+            ctx.moveTo(toX, toY);
+            ctx.lineTo(point1.x, point1.y);
+            ctx.lineTo(point2.x, point2.y);
+            ctx.fill();
+            point1 = point2;
+        }
+    }
+}
 
 function wanderBehavior(entity){
     entity.x += entity.vars[0];
@@ -143,6 +329,15 @@ class Block {
   }
 }
 
+class NonBlock{
+    constructor(imgdt, x, y){
+        this.imgdt = imgdt;
+        this.x = x;
+        this.y = y;
+        
+    }
+}
+
 class Chunk {
   constructor(id) {
     this.id = id;
@@ -153,6 +348,7 @@ class Chunk {
         b: 0
       });
     }
+    this.nonBlocks = [];
     this.imgdt = new ImageData(256, 256);
   }
   resetImgdt() {
@@ -376,6 +572,16 @@ function placeBlock(x, y) {
   }
 }
 
+let treeImgdts = [];
+for (let i=0; i<4; i++) {
+    let td = new TreeData();
+    for (let j=0; j<3; j++) {
+        pctx.clearRect(0, 0, pcan.width, pcan.height);
+        drawTree(td, pctx, mcan.width, 0, 0, 100, 480, 400/mcan.height, [1, 1, 1]);
+        treeImgdts.push(pctx.getImageData(0, 0, pcan.width, pcan.height));
+    }
+}
+
 let nMax = randomBetween(1001, 1502);
 let primes = [];
 let pfs = [];
@@ -462,6 +668,16 @@ for (let i = 510; i > -1; i--) {
       setBlock(j, i, set);
     }
   }
+}
+for (let i=0; i<512; i++) {
+    let chunk = map[i];
+    for (let j=0; j<1; j++) {
+        let x = (i%16)*16+Math.floor(Math.random()*16);
+        let y = Math.floor(i/16)*16+Math.floor(Math.random()*16);
+        if (setBlock(x, y, 0) != 1) {
+            //chunk.nonBlocks.push(new NonBlock(treeImgdts[Math.floor(Math.random()*treeImgdts.length)], x*16, y*16));
+        }
+    }
 }
 mapGenerated = true;
 
@@ -680,9 +896,21 @@ function determineBounds() {
 function drawingLoop() {
   mctx.fillStyle = "#000000FF";
   mctx.fillRect(0, 0, mcw, mch);
-  for (let i = 0; i < 512; i++) {
-    mctx.putImageData(map[i].imgdt, (i % 16) * 256 - view.x + mcw / 2, Math.floor(i / 16) * 256 - view.y + mch / 2);
+  let nonBlocksToPaste = [];
+  for (let i = 0; i < chunksPerScreenW*chunksPerScreenH; i++) {
+    let mapIndex = (Math.floor(view.y/256-chunksPerScreenH/2)+Math.floor(i/chunksPerScreenW))*16+Math.floor(view.x/256-chunksPerScreenW/2)+i%chunksPerScreenW;
+    if (mapIndex > -1 && mapIndex < 512) {
+        let chunk = map[mapIndex];
+        let x = (mapIndex % 16) * 256 - view.x + mcw / 2;
+        let y = Math.floor(mapIndex / 16) * 256 - view.y + mch / 2;
+        mctx.putImageData(chunk.imgdt, x, y);
+        nonBlocksToPaste.push(...chunk.nonBlocks);
+    }
   }
+  if (physicsLoopCounter%1000 < 2) {
+    //console.log(nonBlocksToPaste);
+  }
+  pasteNonBlocks(nonBlocksToPaste, mcan, mctx, view.x-mcw/2+100, view.y-mch/2+480);
   for (let i=0; i<lasers.length; i++) {
     let laser = lasers[i];
     laser.drawSelf(mctx, laser.x-view.x+mcan.width/2, laser.y-view.y+mcan.height/2);
@@ -923,4 +1151,28 @@ function newEntity(entityType, x, y, ob){
     let newEntity = new Entity(entityType, x, y, ob);
     newEntity.entityType.constructor(newEntity);
     return newEntity;
+}
+
+function pasteNonBlocks(nonBlocks, can, ctx, offsetX, offsetY){
+    let ctxImgdt = ctx.getImageData(0, 0, can.width, can.height);
+    for (let i=0; i<nonBlocks.length; i++) {
+        let nonBlock = nonBlocks[i];
+        for (let j=0; j<nonBlock.imgdt.data.length/4; j++) {
+            if (nonBlock.imgdt.data[j*4+3] > 0) {
+                let nonBlockPixelX = j%nonBlock.imgdt.width;
+                let nonBlockPixelY = Math.floor(j/nonBlock.imgdt.width);
+                let nonBlockInCanX = Math.floor(nonBlock.x-offsetX);
+                let nonBlockInCanY = Math.floor(nonBlock.y-offsetY);
+                let canPixelX = nonBlockInCanX+nonBlockPixelX;
+                let canPixelY = nonBlockInCanY+nonBlockPixelY;
+                if (canPixelX > -1 && canPixelY > -1 && canPixelX < can.width && canPixelY < can.height) {
+                    let ctxImgdtIndex = (canPixelY*can.width+canPixelX)*4;
+                    ctxImgdt.data[ctxImgdtIndex] = nonBlock.imgdt.data[j*4];
+                    ctxImgdt.data[ctxImgdtIndex+1] = nonBlock.imgdt.data[j*4+1];
+                    ctxImgdt.data[ctxImgdtIndex+2] = nonBlock.imgdt.data[j*4+2];
+                }
+            }
+        }
+    }
+    ctx.putImageData(ctxImgdt, 0, 0);
 }
