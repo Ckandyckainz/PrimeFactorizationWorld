@@ -1,5 +1,19 @@
 // GitHub version
 
+let startPageDiv = document.getElementById("startpagediv");
+startPageDiv.style.display = "block";
+let newWorldPageDiv = document.getElementById("newworldpagediv");
+let openWorldPageDiv = document.getElementById("openworldpagediv");
+let playDiv = document.getElementById("playdiv");
+let settingsWhilePlayingDiv = document.getElementById("settingswhileplayingdiv");
+let closeSettingsWhilePlayingButton = document.getElementById("closesettingswhileplayingbutton");
+closeSettingsWhilePlayingButton.addEventListener("click", ()=>{
+  settingsWhilePlayingDiv.style.display = "none";
+});
+let saveAndExitButton = document.getElementById("saveandexitbutton");
+let gameCodeOutput = document.getElementById("gamecodeoutput");
+let gameCodeInput = document.getElementById("gamecodeinput");
+
 let mcan = document.getElementById("mcan"); // main canvas
 let pcan = document.getElementById("pcan"); // preparation canvas
 let inventoryGUI = document.getElementById("inventory");
@@ -27,9 +41,58 @@ let entityTouching = undefined;
 let laserIdCounter = 0;
 let lasers = [];
 let firingLasers = false;
+let map = [];
+let nMax = randomBetween(1001, 1502);
+let primes = [];
+let pfs = [];
+let blocks = [];
+let mapGenerated = false;
+let view;
+let keysDown = [];
+let cc = {
+  body: [],
+  energy: []
+};
+let mouseDown = false;
+let mouseWasDown = false;
+let mouseTouching = 1;
+let mousePos = {
+  x: 0,
+  y: 0
+}
+let bounds = {
+  left: false,
+  right: false,
+  up: false,
+  down: false
+};
+let boundChecks = 16;
+let playing = false;
 
 let chunksPerScreenW = Math.ceil(mcan.width/256)+2;
 let chunksPerScreenH = Math.ceil(mcan.height/256)+4;
+
+for (let i = 0; i < 1502; i++) {
+  pfs.push([]);
+}
+for (let i = 2; i < 1502; i++) {
+  if (pfs[i].length == 0) {
+    primes.push({
+      n: i,
+      c: [randomNum(0.3, 0.7, 1000), randomNum(0.3, 0.7, 1000), randomNum(0.3, 0.7, 1000)],
+      noise: randomNum(0.3, 0.7, 1000)
+    });
+    let j = 1;
+    while (i ** j < nMax) {
+      let k = i ** j;
+      while (k < pfs.length) {
+        pfs[k].push(primes.length - 1);
+        k += i ** j;
+      }
+      j++;
+    }
+  }
+}
 
 class TreeData{
     constructor(){
@@ -91,133 +154,6 @@ class LeafData{
     }
 }
 
-function drawTriangle(ctx, x1, y1, x2, y2, x3, y3){
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.lineTo(x3, y3);
-    ctx.fill();
-}
-
-function drawTree(treeData, ctx, m, x, y, tX, tY, trunkY, light){
-    drawBranch(treeData, 0, Math.PI/-2, Math.PI/-2, x, y, tX, tY, ctx, m, trunkY, light, 0);
-}
-
-function drawBranch(td, tier, angle, targetAngle, x, y, tX, tY, ctx, m, trunkY, light, waveCounter){
-    let bm = 1+randomBetween(-td.branchLengthVary, td.branchLengthVary, 0.01);
-    let s = td.branchSegments+randomBetween(-1*td.branchSegmentsVary, td.branchSegmentsVary, 1);
-    let z = (trunkY*5-1)/4;
-    let a = 1.4-trunkY;
-    let b = trunkY-0.4;
-    let xCounter = x;
-    let yCounter = y;
-    let currentAngle = angle;
-    let lastWobble = 0;
-    let wave = waveCounter;
-    let bwsm = 0;
-    let bwlm = 0;
-    let oldBwsm = 0;
-    let oldBwlm = 0;
-    for (let i=0; i<s; i++) {
-        oldBwsm = bwsm;
-        oldBwlm = bwlm;
-        bwsm = 1+Math.random()*td.branchWaveSizeVary;
-        bwlm = 1+Math.random()*td.branchWaveLengthVary;
-        let slm = 1+randomBetween(-td.branchSegmentLengthVary, td.branchSegmentLengthVary, 0.01);
-        let r0 = (td.branchColor[0]*z*a+light[0]*b)*(1-Math.random()*td.branchColorVary);
-        let g0 = td.branchColor[1]*z*a+light[1]*b*(1-Math.random()*td.branchColorVary);
-        let b0 = td.branchColor[2]*z*a+light[2]*b*(1-Math.random()*td.branchColorVary);
-        ctx.strokeStyle = colorString(r0, g0, b0, 1);
-        ctx.lineWidth = td.branchThickness/(td.branchThicknessProportions**(tier+i*td.tierSmoothness/s));
-        ctx.beginPath();
-        ctx.moveTo(xCounter*m+tX+Math.sin(wave*td.branchWaveLength*oldBwlm)*td.branchWaveSize*oldBwsm, yCounter*m+tY);
-        let wobble = randomBetween(-1*td.branchWobble, td.branchWobble, 0.01);
-        wave ++;
-        currentAngle += ((targetAngle-angle)+wobble-lastWobble)/s;
-        lastWobble = wobble;
-        xCounter += Math.cos(currentAngle)*slm*bm/td.tiers/s/2;
-        yCounter += Math.sin(currentAngle)*slm*bm/td.tiers/s/2;
-        let xExtend = xCounter+Math.cos(currentAngle)*slm*bm/td.tiers/td.segmentExtend;
-        let yExtend = yCounter+Math.sin(currentAngle)*slm*bm/td.tiers/td.segmentExtend;
-        ctx.lineTo(xExtend*m+tX+Math.sin(wave*td.branchWaveLength*bwlm)*td.branchWaveSize*bwsm, yExtend*m+tY);
-        ctx.stroke();
-        if (Math.random()*tier/td.tiers > td.ld.leafClumpSpread) {
-            if (Math.random() < 1/2/td.ld.leafClumpAmount) {
-                drawLeafClump(ctx, td.ld, m, xCounter, yCounter, tX, tY, trunkY, light, currentAngle);
-            }
-        }
-    }
-    if (td.tiers > tier) {
-        for (let i=0; i<randomBetween(td.growth-1, td.growth+1, 1); i++) {
-            let branchContinue = false;
-            if (i == 0) {
-                if (Math.random() > td.branchContinue) {
-                    branchContinue = true;
-                }
-            }
-            let newTargetAngle = targetAngle;
-            if (!branchContinue) {
-                newTargetAngle = randomBetween(currentAngle-td.angleVary, currentAngle+td.angleVary, 0.01);
-            }
-            let branchBend = td.branchBend+randomBetween(-1*td.branchBendVary, td.branchBendVary, 0.01);
-            let startingAngle = currentAngle+(newTargetAngle-currentAngle)*branchBend;
-            drawBranch(td, tier+1, startingAngle, newTargetAngle, xCounter, yCounter, tX, tY, ctx, m, trunkY, light, wave);
-        }
-    }
-}
-
-function drawLeafClump(ctx, ld, m, x, y, tX, tY, trunkY, light, angle){
-    let clumpColor = Math.random()*ld.leafClumpColorVary;
-    let clumpAngleVary = randomBetween(-1*ld.leafClumpAngleVary, ld.leafClumpAngleVary, 0.01);
-    let clumpSizeVary = randomBetween(1-ld.leafClumpSizeVary, 1+ld.leafClumpSizeVary, 0.01);
-    let clumpTransparencyVary = Math.random()*ld.leafClumpTransparencyVary;
-    let z = (trunkY*5-1)/4;
-    let a = 1.4-trunkY;
-    let b = trunkY-0.4;
-    for (let i=0; i<ld.leafClumpAmount; i++) {
-        let am = angle+clumpAngleVary+randomBetween(-1*ld.leafAngleVary, ld.leafAngleVary, 0.01);
-        let sm = clumpSizeVary+randomBetween(1-ld.leafSizeVary, 1+ld.leafSizeVary, 0.01);
-        let r0 = (ld.leafColor[0]*z*a+light[0]*b)*(1-Math.random()*ld.leafColorVary*clumpColor);
-        let g0 = (ld.leafColor[1]*z*a+light[1]*b)*(1-Math.random()*ld.leafColorVary*clumpColor);
-        let b0 = (ld.leafColor[2]*z*a+light[2]*b)*(1-Math.random()*ld.leafColorVary*clumpColor);
-        let a0 = ld.leafColor[3]-clumpTransparencyVary*Math.random()*ld.leafTransparencyVary;
-        let point1 = {
-            x: x*m+Math.cos(ld.innerSpreadAngle*0/(ld.leafPoints+1)-ld.innerSpreadAngle/2+am)*ld.startInnerD*sm+tX,
-            y: y*m+Math.sin(ld.innerSpreadAngle*0/(ld.leafPoints+1)-ld.innerSpreadAngle/2+am)*ld.startInnerD*sm+tY,
-            angle: ld.innerSpreadAngle*0/(ld.leafPoints+1)-ld.innerSpreadAngle/2+am
-        };
-        ctx.fillStyle = colorString(r0, g0, b0, a0);
-        for (let j=0; j<ld.leafPoints; j++) {
-            let point2 = {
-                x: x*m+Math.cos(ld.innerSpreadAngle*(j+1)/(ld.leafPoints+1)-ld.innerSpreadAngle/2+am)*ld.startInnerD*sm+tX,
-                y: y*m+Math.sin(ld.innerSpreadAngle*(j+1)/(ld.leafPoints+1)-ld.innerSpreadAngle/2+am)*ld.startInnerD*sm+tY,
-                angle: ld.innerSpreadAngle*(j+1)/(ld.leafPoints+1)-ld.innerSpreadAngle/2+am
-            };
-            ctx.beginPath();
-            ctx.moveTo(x*m+tX, y*m+tY);
-            ctx.lineTo(point1.x, point1.y);
-            ctx.lineTo(point2.x, point2.y);
-            ctx.fill();
-            toX = x*m+Math.cos((point1.angle+point2.angle)/2)*(ld.startInnerD+ld.innerOuterD)*sm+tX;
-            toY = y*m+Math.sin((point1.angle+point2.angle)/2)*(ld.startInnerD+ld.innerOuterD)*sm+tY;
-            ctx.beginPath();
-            ctx.moveTo(toX, toY);
-            ctx.lineTo(point1.x, point1.y);
-            ctx.lineTo(point2.x, point2.y);
-            ctx.fill();
-            point1 = point2;
-        }
-    }
-}
-
-function wanderBehavior(entity){
-    entity.x += entity.vars[0];
-    entity.y += entity.vars[1];
-    if (Math.random() < 0.001) {
-        entity.vars = [Math.random()*2-1, Math.random()*2-1];
-    }
-}
-
 function drawPick(pick, ctx, x, y) {
   ctx.strokeStyle = toolHandleColor;
   ctx.lineWidth = 4;
@@ -258,16 +194,24 @@ function drawToolIcon(tool){
     tool.ctx.fillText("".concat(tool.n), 0, 32);
 }
 
+for (let i=0; i<2; i++) {
+  let can = document.createElement("canvas");
+  can.width = 32;
+  can.height = 32;
+  toolsGUI.appendChild(can);
+}
+
 class Tool {
   constructor(type, n) {
   	this.type = type;
     this.n = n;
     this.n1 = -1;
     this.c = "#FFFFFFFF";
-    this.can = document.createElement("canvas");
-    this.can.width = 32;
-    this.can.height = 32;
-    toolsGUI.appendChild(this.can);
+    if (n > 1) {
+      this.n1 = primes[getNumIndex(primes, n)+1].n;
+      this.c = colorString(...primes[getNumIndex(primes, n)].c, 1);
+    }
+    this.can = toolsGUI.children[type];
     this.ctx = this.can.getContext("2d");
     this.drawSelf = drawToolFunctions[type];
     drawToolIcon(this);
@@ -317,6 +261,10 @@ class Block {
         this.c[1] *= primes[pfs[n][i]].c[1] * 0.8;
         this.c[2] *= primes[pfs[n][i]].c[2] * 0.8;
         this.noise *= primes[pfs[n][i]].noise;
+        this.c[0] = Math.floor(this.c[0]*1000)/1000;
+        this.c[1] = Math.floor(this.c[1]*1000)/1000;
+        this.c[2] = Math.floor(this.c[2]*1000)/1000;
+        this.noise = Math.floor(this.noise*1000)/1000;
       }
       this.imgdt = new ImageData(16, 16);
       for (let i = 0; i < 1024; i++) {
@@ -333,8 +281,7 @@ class NonBlock{
     constructor(imgdt, x, y){
         this.imgdt = imgdt;
         this.x = x;
-        this.y = y;
-        
+        this.y = y;  
     }
 }
 
@@ -509,71 +456,324 @@ class Laser{
     }
 }
 
-function randomBetween(min, max) {
-  return Math.floor(Math.random() * (max - min)) + min;
+function switchPageButtonSetup(buttonId, startPageId, endPageId, func){
+  document.getElementById(buttonId).addEventListener("click", ()=>{
+    document.getElementById(startPageId).style.display = "none";
+    document.getElementById(endPageId).style.display = "block";
+    if (func != undefined) {
+      func();
+    }
+  });
 }
 
-function colorString(r, g, b, a) {
-  let color = Math.floor(r * 255) * 256 ** 3 + Math.floor(g * 255) * 256 ** 2 + Math.floor(b * 255) * 256 + Math.floor(a * 255);
-  return "#" + color.toString(16).padStart(8, "0");
-}
+switchPageButtonSetup("newworldbutton", "startpagediv", "newworldpagediv");
+switchPageButtonSetup("openworldbutton", "startpagediv", "openworldpagediv");
+switchPageButtonSetup("newworldpagebackbutton", "newworldpagediv", "startpagediv");
+switchPageButtonSetup("openworldpagebackbutton", "openworldpagediv", "startpagediv");
+switchPageButtonSetup("saveandexitbutton", "playdiv", "saveandexitpagediv");
+switchPageButtonSetup("saveandexitbutton", "settingswhileplayingdiv", "saveandexitpagediv", ()=>{
+  playing = false;
+  gameCodeOutput.innerText = saveCurrentWorldAsCode();
+});
+switchPageButtonSetup("saveandexitcontinueplayingbutton", "saveandexitpagediv", "playdiv", ()=>{
+  startPlaying();
+});
+switchPageButtonSetup("saveandexitbacktostartpagebutton", "saveandexitpagediv", "startpagediv");
+switchPageButtonSetup("generateandplaybutton", "newworldpagediv", "playdiv", ()=>{
+  generateNewWorld();
+  startPlaying();
+});
+switchPageButtonSetup("openworldbycodebutton", "openworldpagediv", "playdiv", ()=>{
+  let world = getWorldFromCode(gameCodeInput.value);
+  gameCodeInput.value = "";
+  startPlaying(world);
+});
 
-function weightedArrayPick(array, weight, offset) {
-  let choosing = true;
-  let counter = -1;
-  while (choosing) {
-    counter++;
-    if (Math.random() < weight) {
-      choosing = false;
+function getWorldFromCode(code){
+  mapGenerated = false;
+  let world = JSON.parse(code);
+  world.map = replaceDecompress1(world.map);
+  world.map = decompressAdjacentSameArrayItems(world.map.split(","));
+  let map2 = [];
+  for (let i = 0; i < 512; i++) {
+    let chunk = new Chunk(i);
+    map2.push(chunk);
+  }
+  for (let i=0; i<512*256; i++) {
+    map2[Math.floor(i/256)].map[i%256] = {n: world.map[i], b: 0};
+    if (world.map[i] == undefined) {
+      map2[Math.floor(i/256)].map[i%256].n = 1;
     }
   }
-  return array[(counter+offset) % array.length];
-}
-
-function setBlock(x, y, n) {
-  if (inWorldBounds(x, y)) {
-    let x2 = Math.floor(x / 16);
-    let y2 = Math.floor(y / 16);
-    if (n == 0) {
-      return map[y2 * 16 + x2].map[(y % 16) * 16 + x % 16].n;
-    } else {
-      if (n == "b") {
-        return map[y2 * 16 + x2].map[(y % 16) * 16 + x % 16].b;
+  world.map = map2;
+  console.log(world.map);
+  map = world.map;
+  let blocks2 = [, new Block(1)];
+  world.blocks.otherData = replaceDecompress1(world.blocks.otherData).split(",");
+  world.blocks.imgdts = replaceDecompress1(world.blocks.imgdts).split(",");
+  for (let i=0; i<world.blocks.otherData.length/4; i++) {
+    let imgdt = new ImageData(16, 16);
+    let k = 0;
+    for (let j=0; j<imgdt.data.length; j++) {
+      if (j%4 == 3) {
+        imgdt.data[j] = 255;
       } else {
-        map[y2 * 16 + x2].map[(y % 16) * 16 + x % 16].n = n;
-        if (mapGenerated) {
-          map[y2 * 16 + x2].resetNearbyImgdts();
-        }
+        imgdt.data[j] = world.blocks.imgdts[i*768+k];
+        k ++;
       }
     }
-  } else {
-    return 1;
+    blocks2.push({
+      n: i+2,
+      c: world.blocks.otherData.slice(i*4, i*4+3),
+      noise: world.blocks.otherData[i*4+3],
+      imgdt: imgdt
+    });
   }
+  world.blocks = blocks2;
+  blocks = world.blocks;
+  uc = world.uc;
+  cc = world.cc;
+  for (let i=0; primes[i].n<blocks.length; i++) {
+    primes[i].c = blocks[primes[i].n].c;
+    primes[i].noise = blocks[primes[i].n].noise;
+  }
+  tools = [];
+  for (let i=0; i<world.tools.length; i+=2) {
+    tools.push(new Tool(...world.tools.slice(i, i+2)));
+  }
+  pick = tools[0];
+  inventory = [];
+  mapGenerated = true;
+  return world;
+};
+
+function randomNum(times, add, precision){
+  return Math.floor((Math.random()*times+add)*precision)/precision;
 }
 
-function breakBlock(x, y) {
-  let n = setBlock(x, y, 0);
-  let index = getNumIndex(inventory, n);
-  if (index == undefined) {
-    seenNewBlock(n);
-    index = 0;
+function generateNewWorld(){
+  mapGenerated = false;
+  uc = [Math.random() * 0.2 + 0.3, Math.random() * 0.2 + 0.3, Math.random() * 0.2 + 0.3];
+  map = [];
+  nMax = randomBetween(1001, 1502);
+  blocks = [];
+  cc = {
+    body: [],
+    energy: []
+  };
+  for (let i = 0; i < 3; i++) {
+    cc.body.push(Math.random() * 0.2 + 0.4);
   }
-  increaseInventoryBlockAmount(index, 1);
-  setBlock(x, y, 1);
-}
+  for (let i = 0; i < 3; i++) {
+    cc.energy.push(Math.random() * 0.3 + 0.7);
+  }
+  for (let i=0; i<primes.length; i++) {
+    primes[i].c = [randomNum(0.3, 0.7, 1000), randomNum(0.3, 0.7, 1000), randomNum(0.3, 0.7, 1000)];
+    primes[i].noise = randomNum(0.3, 0.7, 1000);
+  }
+  for (let i = 1; i < nMax; i++) {
+    blocks[i] = new Block(i);
+  }
 
-function placeBlock(x, y) {
-  if (selectedBlock != undefined) {
-    let index = getNumIndex(inventory, selectedBlock);
-    if (inventory[index].a > 0) {
-        increaseInventoryBlockAmount(index, -1);
-        setBlock(x, y, selectedBlock);
+  for (let i = 0; i < 512; i++) {
+    let chunk = new Chunk(i);
+    map.push(chunk);
+  }
+  for (let i = 0; i < 256; i++) {
+    setBlock(i, 511, nMax - 1)
+  }
+  for (let i = 510; i > -1; i--) {
+    for (let j = 0; j < 256; j++) {
+      let choosing = true;
+      let x = randomBetween(j - 1, j + 2);
+      let y = randomBetween(i + 1, i + 3);
+      while (choosing) {
+        x = randomBetween(j - 1, j + 2);
+        y = randomBetween(i + 1, i + 3);
+        if (x > -1) {
+          if (y > -1) {
+            if (x < 256) {
+              if (y < 512) {
+                choosing = false;
+              }
+            }
+          }
+        }
+      }
+      let set = setBlock(x, y, 0);
+      if (set > 1) {
+        if (Math.random() > 0.05) {
+          setBlock(j, i, set);
+        } else {
+          let factor = 0;
+          pfs[set].forEach((item) => {
+            if (Math.random() < 1 / primes[item].n) {
+              factor = primes[item].n;
+            }
+          });
+          if (factor == 0) {
+            let decrease = true;
+            for (let i = 0; i < pfs[set].length; i++) {
+              if (Math.random() < 0.7) {
+                decrease = false;
+              }
+            }
+            if (decrease) {
+              setBlock(j, i, set - 1);
+            } else {
+              setBlock(j, i, set);
+            }
+          } else {
+            setBlock(j, i, set / factor);
+          }
+        }
+      } else {
+        setBlock(j, i, set);
+      }
     }
   }
+  for (let i=0; i<512; i++) {
+      let chunk = map[i];
+      for (let j=0; j<1; j++) {
+          let x = (i%16)*16+Math.floor(Math.random()*16);
+          let y = Math.floor(i/16)*16+Math.floor(Math.random()*16);
+          if (setBlock(x, y, 0) != 1) {
+              //chunk.nonBlocks.push(new NonBlock(treeImgdts[Math.floor(Math.random()*treeImgdts.length)], x*16, y*16));
+          }
+      }
+  }
+  tools = [];
+  tools.push(new Tool(0, 1));
+  tools.push(new Tool(1, 1));
+  pick = tools[0];
+  mapGenerated = true;
+}
+
+function startPlaying(world){
+  map.forEach((chunk) => {
+    chunk.resetImgdt();
+  });
+  respawnView();
+  playing = true;
+  inventory = [];
+  while (inventoryGUI.children.length > 0) {
+    inventoryGUI.removeChild(inventoryGUI.children[0]);
+  }
+  if (world != undefined) {
+    for (let i=0; i<world.inventory.length; i++) {
+      increaseInventoryNumAmount(world.inventory[i].n*1, world.inventory[i].a*1);
+    }
+  }
+  drawingLoop();
+  physicsLoop();
+}
+
+function saveCurrentWorldAsCode(){
+  let map2 = [];
+  for (let i=0; i<map.length; i++) {
+    for (let j=0; j<map[i].map.length; j++) {
+      map2.push(map[i].map[j].n);
+    }
+  }
+  map2 = compressAdjacentSameArrayItems(map2).join();
+  map2 = replaceCompress1(map2);
+  let blocksOtherData = [];
+  let blocksImgdts = [];
+  for (let i=2; i<blocks.length; i++) {
+    blocksOtherData.push(...blocks[i].c.slice(0, 3), blocks[i].noise);
+    for (let j=0; j<blocks[i].imgdt.data.length; j++) {
+      if (j%4 != 3) {
+        blocksImgdts.push(blocks[i].imgdt.data[j]);
+      }
+    }
+  }
+  blocksOtherData = replaceCompress1(blocksOtherData.join());
+  blocksImgdts = replaceCompress1(blocksImgdts.join());
+  let tools2 = [];
+  for (let i=0; i<tools.length; i++) {
+    tools2.push(tools[i].type, tools[i].n);
+  }
+  let world = {map: map2, inventory: inventory, blocks: {otherData: blocksOtherData, imgdts: blocksImgdts}, uc: uc, cc: cc, tools: tools2};
+  console.log(world);
+  return JSON.stringify(world);
+}
+
+function replaceCompress1(text){
+    let newChars = [];
+    for (let i=65; i<91; i++) {
+        newChars.push(String.fromCharCode(i));
+    }
+    let separator = newChars.shift();
+    let decompressKey = "";
+    let newText = text;
+    let done = false;
+    while (!done) {
+        let goodString = {benefit: -Infinity};
+        let fullNewText = decompressKey+newText;
+        searchForGoodStringLoop: for (let i=2; i>1; i--) {
+            for (let j=0; j<fullNewText.length-i+1; j++) {
+                if (fullNewText.substring(j, j+i) != goodString.string) {
+                    let string = {
+                        string: fullNewText.substring(j, j+i),
+                        benefit: -2-i,
+                        count: 0
+                    }
+                    for (let k=0; k<fullNewText.length-i+1; k++) {
+                        if (fullNewText.substring(k, k+i) == string.string) {
+                            string.benefit += i-1;
+                            string.count ++;
+                            k += i-1;
+                        }
+                    }
+                    if (string.benefit > 0 && !containsChar(string.string, [separator])) {
+                        goodString = string;
+                        break searchForGoodStringLoop;
+                    }
+                }
+            }
+        }
+        console.log(goodString);
+        if (goodString.benefit > 0) {
+            let replacer = newChars.shift();
+            decompressKey = decompressKey.replaceAll(goodString.string, replacer);
+            newText = newText.replaceAll(goodString.string, replacer);
+            decompressKey = replacer+goodString.string+separator+decompressKey;
+            if (newChars.length == 0) {
+                done = true;
+            }
+        } else {
+            done = true;
+        }
+    }
+    return decompressKey+newText;
+}
+
+function replaceDecompress1(text){
+  let text2 = text;
+  while (text2.split("A").length > 1) {
+    let decompressKey = text2.split("A")[0];
+    text2 = text2.substring(decompressKey.length+1, text2.length);
+    let replacer = decompressKey[0];
+    let replaced = decompressKey.substring(1, decompressKey.length);
+    text2 = text2.replaceAll(replacer, replaced);
+  }
+  return text2;
+}
+
+function containsChar(string, chars){
+    let hasChar = false;
+    for (let i=0; i<chars.length; i++) {
+        for (let j=0; j<string.length; j++) {
+            if (string[j] == chars[i]) {
+                hasChar = true;
+            }
+        }
+    }
+    return hasChar;
 }
 
 let treeImgdts = [];
-for (let i=0; i<4; i++) {
+for (let i=0; i<0; i++) {
     let td = new TreeData();
     for (let j=0; j<3; j++) {
         pctx.clearRect(0, 0, pcan.width, pcan.height);
@@ -581,105 +781,6 @@ for (let i=0; i<4; i++) {
         treeImgdts.push(pctx.getImageData(0, 0, pcan.width, pcan.height));
     }
 }
-
-let nMax = randomBetween(1001, 1502);
-let primes = [];
-let pfs = [];
-let blocks = [];
-for (let i = 0; i < nMax; i++) {
-  pfs.push([]);
-}
-for (let i = 2; i < nMax; i++) {
-  if (pfs[i].length == 0) {
-    primes.push({
-      n: i,
-      c: [Math.random() * 0.3 + 0.7, Math.random() * 0.3 + 0.7, Math.random() * 0.3 + 0.7],
-      noise: Math.random() * 0.3 + 0.7
-    });
-    let j = 1;
-    while (i ** j < nMax) {
-      let k = i ** j;
-      while (k < pfs.length) {
-        pfs[k].push(primes.length - 1);
-        k += i ** j;
-      }
-      j++;
-    }
-  }
-  blocks[i] = new Block(i);
-}
-blocks[1] = new Block(1);
-
-let mapGenerated = false;
-let map = [];
-for (let i = 0; i < 512; i++) {
-  let chunk = new Chunk(i);
-  map.push(chunk);
-}
-for (let i = 0; i < 256; i++) {
-  setBlock(i, 511, nMax - 1);
-}
-for (let i = 510; i > -1; i--) {
-  for (let j = 0; j < 256; j++) {
-    let choosing = true;
-    let x = randomBetween(j - 1, j + 2);
-    let y = randomBetween(i + 1, i + 3);
-    while (choosing) {
-      x = randomBetween(j - 1, j + 2);
-      y = randomBetween(i + 1, i + 3);
-      if (x > -1) {
-        if (y > -1) {
-          if (x < 256) {
-            if (y < 512) {
-              choosing = false;
-            }
-          }
-        }
-      }
-    }
-    let set = setBlock(x, y, 0);
-    if (set > 1) {
-      if (Math.random() > 0.05) {
-        setBlock(j, i, set);
-      } else {
-        let factor = 0;
-        pfs[set].forEach((item) => {
-          if (Math.random() < 1 / primes[item].n) {
-            factor = primes[item].n;
-          }
-        });
-        if (factor == 0) {
-          let decrease = true;
-          for (let i = 0; i < pfs[set].length; i++) {
-            if (Math.random() < 0.7) {
-              decrease = false;
-            }
-          }
-          if (decrease) {
-            setBlock(j, i, set - 1);
-          } else {
-            setBlock(j, i, set);
-          }
-        } else {
-          setBlock(j, i, set / factor);
-        }
-      }
-    } else {
-      setBlock(j, i, set);
-    }
-  }
-}
-for (let i=0; i<512; i++) {
-    let chunk = map[i];
-    for (let j=0; j<1; j++) {
-        let x = (i%16)*16+Math.floor(Math.random()*16);
-        let y = Math.floor(i/16)*16+Math.floor(Math.random()*16);
-        if (setBlock(x, y, 0) != 1) {
-            //chunk.nonBlocks.push(new NonBlock(treeImgdts[Math.floor(Math.random()*treeImgdts.length)], x*16, y*16));
-        }
-    }
-}
-mapGenerated = true;
 
 function seenNewBlock(block) {
   let div = document.createElement("div");
@@ -732,12 +833,6 @@ function seenNewBlock(block) {
   });
 }
 
-let uc = [Math.random() * 0.2 + 0.3, Math.random() * 0.2 + 0.3, Math.random() * 0.2 + 0.3];
-map.forEach((chunk) => {
-  chunk.resetImgdt();
-});
-
-let view;
 function respawnView() {
     view = {
         x: 2000,
@@ -751,8 +846,6 @@ function respawnView() {
         energy: 50
       };
 }
-respawnView();
-let keysDown = [];
 
 function keypress(event) {
   let hasKey = false;
@@ -763,6 +856,9 @@ function keypress(event) {
   });
   if (!hasKey) {
     keysDown.push(event.key);
+  }
+  if (event.key == "Escape" && playDiv.style.display == "block") {
+    settingsWhilePlayingDiv.style.display = "block";
   }
 }
 document.addEventListener("keydown", keypress);
@@ -775,12 +871,6 @@ function keyup(event) {
   }
 }
 document.addEventListener("keyup", keyup);
-
-let mouseTouching = 1;
-let mousePos = {
-  x: 0,
-  y: 0
-}
 
 function mousemove(event) {
   let x = Math.floor((view.x - mcw / 2 + event.x) / 16);
@@ -813,9 +903,6 @@ function mousemove(event) {
 }
 mcan.addEventListener("mousemove", mousemove);
 
-let mouseDown = false;
-let mouseWasDown = false;
-
 function mousedown() {
   mouseDown = true;
 }
@@ -825,25 +912,6 @@ function mouseup() {
   mouseDown = false;
 }
 mcan.addEventListener("mouseup", mouseup);
-
-let cc = {
-  body: [],
-  energy: []
-};
-for (let i = 0; i < 3; i++) {
-  cc.body.push(Math.random() * 0.2 + 0.4);
-}
-for (let i = 0; i < 3; i++) {
-  cc.energy.push(Math.random() * 0.3 + 0.7);
-}
-
-let bounds = {
-  left: false,
-  right: false,
-  up: false,
-  down: false
-};
-let boundChecks = 16;
 
 function determineBounds() {
   bounds = {
@@ -939,9 +1007,10 @@ function drawingLoop() {
   mctx.fillRect(mcan.width*0.9, mcan.height*0.015, mcan.width*0.09*view.health/view.maxHealth, mcan.height*0.015);
   mctx.fillStyle = "blue";
   mctx.fillRect(mcan.width*0.9, mcan.height*0.04, mcan.width*0.09*view.energy/view.maxEnergy, mcan.height*0.015);
-  requestAnimationFrame(drawingLoop);
+  if (playing) {
+    requestAnimationFrame(drawingLoop);
+  }
 }
-drawingLoop();
 
 function physicsLoop() {
   if (mouseDown) {
@@ -1079,9 +1148,10 @@ function physicsLoop() {
   view.health = boundVar(view.health, 0, view.maxHealth);
   view.energy = boundVar(view.energy, 0, view.maxEnergy);
   physicsLoopCounter ++;
-  requestAnimationFrame(physicsLoop);
+  if (playing) {
+    requestAnimationFrame(physicsLoop);
+  }
 }
-physicsLoop();
 
 function inWorldBounds(x, y) {
     return x > -1 && y > -1 && x < 256 && y < 512;
@@ -1175,4 +1245,231 @@ function pasteNonBlocks(nonBlocks, can, ctx, offsetX, offsetY){
         }
     }
     ctx.putImageData(ctxImgdt, 0, 0);
+}
+
+function randomBetween(min, max) {
+  return Math.floor(Math.random() * (max - min)) + min;
+}
+
+function colorString(r, g, b, a) {
+  let color = Math.floor(r * 255) * 256 ** 3 + Math.floor(g * 255) * 256 ** 2 + Math.floor(b * 255) * 256 + Math.floor(a * 255);
+  return "#" + color.toString(16).padStart(8, "0");
+}
+
+function weightedArrayPick(array, weight, offset) {
+  let choosing = true;
+  let counter = -1;
+  while (choosing) {
+    counter++;
+    if (Math.random() < weight) {
+      choosing = false;
+    }
+  }
+  return array[(counter+offset) % array.length];
+}
+
+function setBlock(x, y, n) {
+  if (inWorldBounds(x, y)) {
+    let x2 = Math.floor(x / 16);
+    let y2 = Math.floor(y / 16);
+    if (n == 0) {
+      return map[y2 * 16 + x2].map[(y % 16) * 16 + x % 16].n;
+    } else {
+      if (n == "b") {
+        return map[y2 * 16 + x2].map[(y % 16) * 16 + x % 16].b;
+      } else {
+        map[y2 * 16 + x2].map[(y % 16) * 16 + x % 16].n = n;
+        if (mapGenerated) {
+          map[y2 * 16 + x2].resetNearbyImgdts();
+        }
+      }
+    }
+  } else {
+    return 1;
+  }
+}
+
+function breakBlock(x, y) {
+  let n = setBlock(x, y, 0);
+  let index = getNumIndex(inventory, n);
+  if (index == undefined) {
+    seenNewBlock(n);
+    index = 0;
+  }
+  increaseInventoryBlockAmount(index, 1);
+  setBlock(x, y, 1);
+}
+
+function placeBlock(x, y) {
+  if (selectedBlock != undefined) {
+    let index = getNumIndex(inventory, selectedBlock);
+    if (inventory[index].a > 0) {
+        increaseInventoryBlockAmount(index, -1);
+        setBlock(x, y, selectedBlock);
+    }
+  }
+}
+
+function drawTriangle(ctx, x1, y1, x2, y2, x3, y3){
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.lineTo(x3, y3);
+    ctx.fill();
+}
+
+function drawTree(treeData, ctx, m, x, y, tX, tY, trunkY, light){
+    drawBranch(treeData, 0, Math.PI/-2, Math.PI/-2, x, y, tX, tY, ctx, m, trunkY, light, 0);
+}
+
+function drawBranch(td, tier, angle, targetAngle, x, y, tX, tY, ctx, m, trunkY, light, waveCounter){
+    let bm = 1+randomBetween(-td.branchLengthVary, td.branchLengthVary, 0.01);
+    let s = td.branchSegments+randomBetween(-1*td.branchSegmentsVary, td.branchSegmentsVary, 1);
+    let z = (trunkY*5-1)/4;
+    let a = 1.4-trunkY;
+    let b = trunkY-0.4;
+    let xCounter = x;
+    let yCounter = y;
+    let currentAngle = angle;
+    let lastWobble = 0;
+    let wave = waveCounter;
+    let bwsm = 0;
+    let bwlm = 0;
+    let oldBwsm = 0;
+    let oldBwlm = 0;
+    for (let i=0; i<s; i++) {
+        oldBwsm = bwsm;
+        oldBwlm = bwlm;
+        bwsm = 1+Math.random()*td.branchWaveSizeVary;
+        bwlm = 1+Math.random()*td.branchWaveLengthVary;
+        let slm = 1+randomBetween(-td.branchSegmentLengthVary, td.branchSegmentLengthVary, 0.01);
+        let r0 = (td.branchColor[0]*z*a+light[0]*b)*(1-Math.random()*td.branchColorVary);
+        let g0 = td.branchColor[1]*z*a+light[1]*b*(1-Math.random()*td.branchColorVary);
+        let b0 = td.branchColor[2]*z*a+light[2]*b*(1-Math.random()*td.branchColorVary);
+        ctx.strokeStyle = colorString(r0, g0, b0, 1);
+        ctx.lineWidth = td.branchThickness/(td.branchThicknessProportions**(tier+i*td.tierSmoothness/s));
+        ctx.beginPath();
+        ctx.moveTo(xCounter*m+tX+Math.sin(wave*td.branchWaveLength*oldBwlm)*td.branchWaveSize*oldBwsm, yCounter*m+tY);
+        let wobble = randomBetween(-1*td.branchWobble, td.branchWobble, 0.01);
+        wave ++;
+        currentAngle += ((targetAngle-angle)+wobble-lastWobble)/s;
+        lastWobble = wobble;
+        xCounter += Math.cos(currentAngle)*slm*bm/td.tiers/s/2;
+        yCounter += Math.sin(currentAngle)*slm*bm/td.tiers/s/2;
+        let xExtend = xCounter+Math.cos(currentAngle)*slm*bm/td.tiers/td.segmentExtend;
+        let yExtend = yCounter+Math.sin(currentAngle)*slm*bm/td.tiers/td.segmentExtend;
+        ctx.lineTo(xExtend*m+tX+Math.sin(wave*td.branchWaveLength*bwlm)*td.branchWaveSize*bwsm, yExtend*m+tY);
+        ctx.stroke();
+        if (Math.random()*tier/td.tiers > td.ld.leafClumpSpread) {
+            if (Math.random() < 1/2/td.ld.leafClumpAmount) {
+                drawLeafClump(ctx, td.ld, m, xCounter, yCounter, tX, tY, trunkY, light, currentAngle);
+            }
+        }
+    }
+    if (td.tiers > tier) {
+        for (let i=0; i<randomBetween(td.growth-1, td.growth+1, 1); i++) {
+            let branchContinue = false;
+            if (i == 0) {
+                if (Math.random() > td.branchContinue) {
+                    branchContinue = true;
+                }
+            }
+            let newTargetAngle = targetAngle;
+            if (!branchContinue) {
+                newTargetAngle = randomBetween(currentAngle-td.angleVary, currentAngle+td.angleVary, 0.01);
+            }
+            let branchBend = td.branchBend+randomBetween(-1*td.branchBendVary, td.branchBendVary, 0.01);
+            let startingAngle = currentAngle+(newTargetAngle-currentAngle)*branchBend;
+            drawBranch(td, tier+1, startingAngle, newTargetAngle, xCounter, yCounter, tX, tY, ctx, m, trunkY, light, wave);
+        }
+    }
+}
+
+function drawLeafClump(ctx, ld, m, x, y, tX, tY, trunkY, light, angle){
+    let clumpColor = Math.random()*ld.leafClumpColorVary;
+    let clumpAngleVary = randomBetween(-1*ld.leafClumpAngleVary, ld.leafClumpAngleVary, 0.01);
+    let clumpSizeVary = randomBetween(1-ld.leafClumpSizeVary, 1+ld.leafClumpSizeVary, 0.01);
+    let clumpTransparencyVary = Math.random()*ld.leafClumpTransparencyVary;
+    let z = (trunkY*5-1)/4;
+    let a = 1.4-trunkY;
+    let b = trunkY-0.4;
+    for (let i=0; i<ld.leafClumpAmount; i++) {
+        let am = angle+clumpAngleVary+randomBetween(-1*ld.leafAngleVary, ld.leafAngleVary, 0.01);
+        let sm = clumpSizeVary+randomBetween(1-ld.leafSizeVary, 1+ld.leafSizeVary, 0.01);
+        let r0 = (ld.leafColor[0]*z*a+light[0]*b)*(1-Math.random()*ld.leafColorVary*clumpColor);
+        let g0 = (ld.leafColor[1]*z*a+light[1]*b)*(1-Math.random()*ld.leafColorVary*clumpColor);
+        let b0 = (ld.leafColor[2]*z*a+light[2]*b)*(1-Math.random()*ld.leafColorVary*clumpColor);
+        let a0 = ld.leafColor[3]-clumpTransparencyVary*Math.random()*ld.leafTransparencyVary;
+        let point1 = {
+            x: x*m+Math.cos(ld.innerSpreadAngle*0/(ld.leafPoints+1)-ld.innerSpreadAngle/2+am)*ld.startInnerD*sm+tX,
+            y: y*m+Math.sin(ld.innerSpreadAngle*0/(ld.leafPoints+1)-ld.innerSpreadAngle/2+am)*ld.startInnerD*sm+tY,
+            angle: ld.innerSpreadAngle*0/(ld.leafPoints+1)-ld.innerSpreadAngle/2+am
+        };
+        ctx.fillStyle = colorString(r0, g0, b0, a0);
+        for (let j=0; j<ld.leafPoints; j++) {
+            let point2 = {
+                x: x*m+Math.cos(ld.innerSpreadAngle*(j+1)/(ld.leafPoints+1)-ld.innerSpreadAngle/2+am)*ld.startInnerD*sm+tX,
+                y: y*m+Math.sin(ld.innerSpreadAngle*(j+1)/(ld.leafPoints+1)-ld.innerSpreadAngle/2+am)*ld.startInnerD*sm+tY,
+                angle: ld.innerSpreadAngle*(j+1)/(ld.leafPoints+1)-ld.innerSpreadAngle/2+am
+            };
+            ctx.beginPath();
+            ctx.moveTo(x*m+tX, y*m+tY);
+            ctx.lineTo(point1.x, point1.y);
+            ctx.lineTo(point2.x, point2.y);
+            ctx.fill();
+            toX = x*m+Math.cos((point1.angle+point2.angle)/2)*(ld.startInnerD+ld.innerOuterD)*sm+tX;
+            toY = y*m+Math.sin((point1.angle+point2.angle)/2)*(ld.startInnerD+ld.innerOuterD)*sm+tY;
+            ctx.beginPath();
+            ctx.moveTo(toX, toY);
+            ctx.lineTo(point1.x, point1.y);
+            ctx.lineTo(point2.x, point2.y);
+            ctx.fill();
+            point1 = point2;
+        }
+    }
+}
+
+function wanderBehavior(entity){
+    entity.x += entity.vars[0];
+    entity.y += entity.vars[1];
+    if (Math.random() < 0.001) {
+        entity.vars = [Math.random()*2-1, Math.random()*2-1];
+    }
+}
+
+function compressAdjacentSameArrayItems(array){
+  let newArray = [];
+  let item = array[0];
+  let itemAmount = 0;
+  for (let i=0; i<array.length; i++) {
+    if (array[i] == item) {
+      itemAmount ++;
+    } else {
+      if (itemAmount > 1) {
+        newArray.push(item+"x"+itemAmount);
+      } else {
+        newArray.push(item);
+      }
+      item = array[i];
+      itemAmount = 1;
+    }
+  }
+  return newArray;
+}
+
+function decompressAdjacentSameArrayItems(array){
+  let newArray = array.slice();
+  for (let i=0; i<newArray.length; i++) {
+    let item = newArray[i];
+    let components = item.split("x");
+    if (components.length > 1) {
+      let decompressedItems = [];
+      for (let i=0; i<components[1]; i++) {
+        decompressedItems.push(components[0]);
+      }
+      newArray.splice(i, 1, ...decompressedItems);
+      i += components[1]-2;
+    }
+  }
+  return newArray;
 }

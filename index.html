@@ -7,6 +7,11 @@
                 margin: 0;
                 padding: 0;
             }
+            .pagediv{
+              margin: 0;
+              padding: 0;
+              display: none;
+            }
             canvas{
                 margin: 0;
                 padding: 0;
@@ -19,8 +24,6 @@
                 display: none;
             }
             #inventory{
-              margin: 0;
-              padding: 0;
               height: 100%;
               position: absolute;
               top: 0;
@@ -29,8 +32,6 @@
               overflow-y: auto;
             }
             #tools{
-              margin: 0;
-              padding: 0;
               position: absolute;
               top: 8px;
               left: 64px;
@@ -38,22 +39,61 @@
               overflow-y: auto;
             }
             #crafts{
-              margin: 0;
-              padding: 0;
               position: absolute;
               top: 48px;
               left: 64px;
               background: #808080;
               overflow-y: auto;
             }
+            #settingswhileplayingdiv{
+              position: absolute;
+              top: 20%;
+              left: 35%;
+              width: 30%;
+              height: 60%;
+              background: #404080d0;
+            }
+            #gamecodeoutput{
+              overflow-wrap: break-word;
+              font-size: 8px;
+            }
         </style>
     </head>
     <body>
-        <canvas id="mcan"></canvas>
-        <canvas id="pcan"></canvas>
-        <div id="inventory"></div>
-        <div id="tools"></div>
-        <div id="crafts"></div>
+        <div id="startpagediv" class="pagediv">
+          <button id="newworldbutton">Create New World</button>
+          <button id="openworldbutton">Open Existing World</button>
+        </div>
+        <div id="newworldpagediv" class="pagediv">
+          <button id="generateandplaybutton">Generate and Play</button>
+          <button id="newworldpagebackbutton">Back</button>
+        </div>
+        <div id="openworldpagediv" class="pagediv">
+          <p>Open by code: Type in code:</p>
+          <input id="gamecodeinput">
+          <button id="openworldbycodebutton">Open World</button>
+          <hr>
+          <p>Recently Opened:</p>
+          <button id="openworldpagebackbutton">Back</button>
+          <div id="recentlyopenedworldsdiv"></div>
+        </div>
+        <div id="playdiv" class="pagediv">
+          <canvas id="mcan"></canvas>
+          <canvas id="pcan"></canvas>
+          <div id="inventory"></div>
+          <div id="tools"></div>
+          <div id="crafts"></div>
+        </div>
+        <div id="settingswhileplayingdiv" class="pagediv">
+          <button id="closesettingswhileplayingbutton">Close Settings</button>
+          <button id="saveandexitbutton">Save and exit</button>
+        </div>
+        <div id="saveandexitpagediv" class="pagediv">
+          <button id="saveandexitcontinueplayingbutton">Continue Playing</button>
+          <button id="saveandexitbacktostartpagebutton">Back to Main Menu</button>
+          <p>Your game is saved in this code. Copy and paste it to a file/document to save your progress.</p>
+          <p id="gamecodeoutput"></p>
+        </div>
         <script src="code.js"></script>
     </body>
 </html>
